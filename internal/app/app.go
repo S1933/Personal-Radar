@@ -163,6 +163,10 @@ func (a *App) Briefing(ctx context.Context) (string, error) {
 
 // Run starts the scheduler (collection + briefing) and the telegram listener.
 func (a *App) Run(ctx context.Context) error {
+	// Apply migrations at boot so fresh deployments work without manual steps.
+	if err := a.Migrate(ctx); err != nil {
+		a.Log.Warn("auto-migrate failed", "error", err.Error())
+	}
 	// Collection every 20 minutes.
 	a.Scheduler.Add("collect", scheduler.Spec{
 		Every: 20 * time.Minute,

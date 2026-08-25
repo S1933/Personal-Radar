@@ -8,7 +8,6 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o /bin/radar ./cmd/radar
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata
 COPY --from=build /bin/radar /usr/local/bin/radar
-COPY migrations /app/migrations
 WORKDIR /app
 ENTRYPOINT ["radar"]
 CMD ["run", "-config", "config/radar.yaml"]
