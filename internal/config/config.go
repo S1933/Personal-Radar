@@ -1,0 +1,209 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"time"
+
+	"gopkg.in/yaml.v3"
+)
+
+// Config is the single configuration entry point for the radar daemon.
+type Config struct {
+	Timezone string `yaml:"timezone"`
+
+	LogLevel string `yaml:"log_level"`
+
+	Database DatabaseConfig `yaml:"database"`
+
+	Briefing BriefingConfig `yaml:"briefing"`
+
+	Topics []string `yaml:"topics"`
+
+	RSS      RSSConfig      `yaml:"rss"`
+	Reddit   RedditConfig   `yaml:"reddit"`
+	GitHub   GitHubConfig   `yaml:"github"`
+	X        XConfig        `yaml:"x"`
+	LinkedIn LinkedInConfig `yaml:"linkedin"`
+
+	Telegram TelegramConfig `yaml:"telegram"`
+
+	Models ModelsConfig `yaml:"models"`
+
+	Obsidian ObsidianConfig `yaml:"obsidian"`
+}
+
+type DatabaseConfig struct {
+	// URL takes precedence over individual fields. If empty, it is built
+	// from Host/Port/User/Password/Name.
+	URL      string `yaml:"url"`
+	Host     string `yaml:"host"`
+	Port     int    `yaml:"port"`
+	User     string `yaml:"user"`
+	Password string `yaml:"password"`
+	Name     string `yaml:"name"`
+}
+
+// DSN returns the PostgreSQL connection string. Individual fields are
+// expanded from environment variables when set: RADAR_DB_HOST, RADAR_DB_PORT,
+// RADAR_DB_USER, RADAR_DB_PASSWORD, RADAR_DB_NAME, RADAR_DATABASE_URL.
+func (d DatabaseConfig) DSN() string {
+	if u := envOr("RADAR_DATABASE_URL", d.URL); u != "" {
+		return u
+	}
+	host := envOr("RADAR_DB_HOST", d.Host)
+	user := envOr("RADAR_DB_USER", d.User)
+	pass := envOr("RADAR_DB_PASSWORD", d.Password)
+	name := envOr("RADAR_DB_NAME", d.Name)
+	port := d.Port
+	if s := os.Getenv("RADAR_DB_PORT"); s != "" {
+		fmt.Sscanf(s, "%d", &port)
+	}
+	if host == "" {
+		host = "localhost"
+	}
+	if port == 0 {
+		port = 5432
+	}
+	if user == "" {
+		user = "radar"
+	}
+	if name == "" {
+		name = "radar"
+	}
+	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable", user, pass, host, port, name)
+}
+
+type BriefingConfig struct {
+	Schedule  string `yaml:"schedule"` // "07:00"
+	Timezone  string `yaml:"timezone"` // overrides top-level timezone
+	MaxItems  int    `yaml:"max_items"`
+	MaxTrends int    `yaml:"max_trends"`
+	Send      bool   `yaml:"send"` // deliver via Telegram when true
+}
+
+type RSSConfig struct {
+	Enabled bool       `yaml:"enabled"`
+	Feeds   []RSSFeed  `yaml:"feeds"`
+}
+
+type RSSFeed struct {
+	Name   string   `yaml:"name"`
+	URL    string   `yaml:"url"`
+	Topics []string `yaml:"topics"`
+}
+
+type RedditConfig struct {
+	Enabled    bool     `yaml:"enabled"`
+	Subreddits []string `yaml:"subreddits"`
+	Listing    string   `yaml:"listing"` // hot | new | rising | top
+	Limit      int      `yaml:"limit"`   // posts per subreddit per poll
+}
+
+type GitHubConfig struct {
+	Enabled      bool     `yaml:"enabled"`
+	Repositories []string `yaml:"repositories"`
+	Organizations []string `yaml:"organizations"`
+	Topics       []string `yaml:"topics"`
+}
+
+type XConfig struct {
+	Enabled bool     `yaml:"enabled"`
+	Accounts []string `yaml:"accounts"`
+	Queries  []string `yaml:"queries"`
+}
+
+type LinkedInConfig struct {
+	Enabled bool         `yaml:"enabled"`
+	Pages   []LinkedInPage `yaml:"pages"`
+}
+
+type LinkedInPage struct {
+	Name string `yaml:"name"`
+	URL  string `yaml:"url"`
+}
+
+type TelegramConfig struct {
+	Enabled     bool   `yaml:"enabled"`
+	ChatID      string `yaml:"chat_id"`
+	AdminChatID string `yaml:"admin_chat_id"`
+}
+
+type ModelsConfig struct {
+	BaseURL string      `yaml:"base_url"` // OpenAI-compatible endpoint
+	APIKey  string      `yaml:"api_key"`
+	Filter  ModelConfig `yaml:"filter"`
+	Rank    ModelConfig `yaml:"rank"`
+	Synth   ModelConfig `yaml:"synthesis"`
+}
+
+type ModelConfig struct {
+	Model string  `yaml:"model"`
+	MaxTokens int `yaml:"max_tokens"`
+}
+
+type ObsidianConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	VaultPath string `yaml:"vault_path"`
+}
+
+func envOr(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+// LoadConfig reads a YAML config file and returns the parsed Config.
+func LoadConfig(path string) (*Config, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read config: %w", err)
+	}
+	cfg := &Config{}
+	if err := yaml.Unmarshal(b, cfg); err != nil {
+		return nil, fmt.Errorf("parse config %s: %w", path, err)
+	}
+	cfg.defaults()
+	return cfg, nil
+}
+
+func (c *Config) defaults() {
+	if c.Timezone == "" {
+		c.Timezone = "Europe/Paris"
+	}
+	if c.LogLevel == "" {
+		c.LogLevel = "info"
+	}
+	if c.Briefing.Schedule == "" {
+		c.Briefing.Schedule = "07:00"
+	}
+	if c.Briefing.MaxItems == 0 {
+		c.Briefing.MaxItems = 10
+	}
+	if c.Briefing.MaxTrends == 0 {
+		c.Briefing.MaxTrends = 3
+	}
+	if c.Reddit.Listing == "" {
+		c.Reddit.Listing = "hot"
+	}
+	if c.Reddit.Limit == 0 {
+		c.Reddit.Limit = 25
+	}
+	if c.Models.BaseURL == "" {
+		c.Models.BaseURL = "https://api.openai.com/v1"
+	}
+}
+
+// Location returns the configured timezone.
+func (c *Config) Location() *time.Location {
+	tz := c.Timezone
+	if c.Briefing.Timezone != "" {
+		tz = c.Briefing.Timezone
+	}
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		return time.UTC
+	}
+	return loc
+}

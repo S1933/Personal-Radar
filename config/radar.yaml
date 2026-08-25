@@ -1,0 +1,90 @@
+timezone: Europe/Paris
+
+log_level: info
+
+database:
+  host: postgres
+  port: 5432
+  user: radar
+  password: radar
+  name: radar
+
+briefing:
+  schedule: "07:00"
+  max_items: 10
+  max_trends: 3
+  send: true
+
+topics:
+  - ai
+  - coding-agents
+  - software-engineering
+  - devops
+  - open-source
+  - go
+  - php
+  - typescript
+
+rss:
+  enabled: true
+  feeds:
+    - name: OpenAI Blog
+      url: https://openai.com/news/rss.xml
+      topics: [ai]
+    - name: Anthropic News
+      url: https://www.anthropic.com/rss.xml
+      topics: [ai, coding-agents]
+    - name: Go Blog
+      url: https://go.dev/blog/feed.atom
+      topics: [go, software-engineering]
+    - name: Hacker News Front Page
+      url: https://hnrss.org/frontpage
+      topics: [software-engineering, open-source]
+    - name: Reddit r/LocalLLaMA RSS
+      url: https://www.reddit.com/r/LocalLLaMA/.rss
+      topics: [ai]
+
+reddit:
+  enabled: true
+  subreddits:
+    - aiagents
+    - MachineLearning
+    - LocalLLaMA
+    - golang
+    - devops
+  listing: hot
+  limit: 25
+
+github:
+  enabled: true
+  repositories:
+    - openai/openai-agents-python
+    - anthropics/claude-code
+    - golang/go
+  organizations: []
+  topics: []
+
+x:
+  enabled: false
+  accounts: []
+  queries: []
+
+linkedin:
+  enabled: false
+  pages: []
+
+telegram:
+  enabled: true
+
+models:
+  base_url: https://api.opencode.ai/v1
+  filter:
+    model: deepseek-v4-flash
+  rank:
+    model: minimax-m3
+  synthesis:
+    model: glm-5.3
+
+obsidian:
+  enabled: true
+  vault_path: /data/obsidian
