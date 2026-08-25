@@ -135,30 +135,30 @@ func (s *Store) TopScoredItems(ctx context.Context, since time.Duration, limit i
 
 // ScoredItem is an item row joined with its score.
 type ScoredItem struct {
-	DBID        int64
-	Source      string
-	SourceID    string
-	URL         string
+	DBID         int64
+	Source       string
+	SourceID     string
+	URL          string
 	CanonicalURL string
-	Author      string
-	Title       string
-	Content     string
-	PublishedAt time.Time
-	Topics      []string
-	Engagement  int64
+	Author       string
+	Title        string
+	Content      string
+	PublishedAt  time.Time
+	Topics       []string
+	Engagement   int64
 
 	Score Score
 }
 
 // Score mirrors the scores table.
 type Score struct {
-	Importance     float64
-	Relevance      float64
-	Novelty        float64
-	Actionability  float64
+	Importance      float64
+	Relevance       float64
+	Novelty         float64
+	Actionability   float64
 	Personalization float64
-	Final          float64
-	Model          string
+	Final           float64
+	Model           string
 }
 
 func (s *Store) queryItems(ctx context.Context, query string, args ...any) ([]ScoredItem, error) {

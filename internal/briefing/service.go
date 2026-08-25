@@ -97,9 +97,9 @@ func (s *Service) Generate(ctx context.Context, opts ...context.Context) (string
 // detectTrends clusters items sharing >= 3 significant words in the title.
 func (s *Service) detectTrends(items []store.ScoredItem) []string {
 	type cluster struct {
-		key   string
+		key    string
 		titles []string
-		count int
+		count  int
 	}
 	var clusters []cluster
 	for _, it := range items {

@@ -83,8 +83,8 @@ type BriefingConfig struct {
 }
 
 type RSSConfig struct {
-	Enabled bool       `yaml:"enabled"`
-	Feeds   []RSSFeed  `yaml:"feeds"`
+	Enabled bool      `yaml:"enabled"`
+	Feeds   []RSSFeed `yaml:"feeds"`
 }
 
 type RSSFeed struct {
@@ -101,20 +101,20 @@ type RedditConfig struct {
 }
 
 type GitHubConfig struct {
-	Enabled      bool     `yaml:"enabled"`
-	Repositories []string `yaml:"repositories"`
+	Enabled       bool     `yaml:"enabled"`
+	Repositories  []string `yaml:"repositories"`
 	Organizations []string `yaml:"organizations"`
-	Topics       []string `yaml:"topics"`
+	Topics        []string `yaml:"topics"`
 }
 
 type XConfig struct {
-	Enabled bool     `yaml:"enabled"`
+	Enabled  bool     `yaml:"enabled"`
 	Accounts []string `yaml:"accounts"`
 	Queries  []string `yaml:"queries"`
 }
 
 type LinkedInConfig struct {
-	Enabled bool         `yaml:"enabled"`
+	Enabled bool           `yaml:"enabled"`
 	Pages   []LinkedInPage `yaml:"pages"`
 }
 
@@ -138,12 +138,12 @@ type ModelsConfig struct {
 }
 
 type ModelConfig struct {
-	Model string  `yaml:"model"`
-	MaxTokens int `yaml:"max_tokens"`
+	Model     string `yaml:"model"`
+	MaxTokens int    `yaml:"max_tokens"`
 }
 
 type ObsidianConfig struct {
-	Enabled bool   `yaml:"enabled"`
+	Enabled   bool   `yaml:"enabled"`
 	VaultPath string `yaml:"vault_path"`
 }
 

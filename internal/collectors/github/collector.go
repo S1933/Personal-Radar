@@ -73,14 +73,14 @@ func (c *Collector) Collect(ctx context.Context) ([]model.Item, error) {
 }
 
 type release struct {
-	ID         int64     `json:"id"`
-	TagName    string    `json:"tag_name"`
-	Name       string    `json:"name"`
-	Body       string    `json:"body"`
-	HTMLURL    string    `json:"html_url"`
+	ID          int64     `json:"id"`
+	TagName     string    `json:"tag_name"`
+	Name        string    `json:"name"`
+	Body        string    `json:"body"`
+	HTMLURL     string    `json:"html_url"`
 	PublishedAt time.Time `json:"published_at"`
-	Prerelease bool      `json:"prerelease"`
-	Author     struct {
+	Prerelease  bool      `json:"prerelease"`
+	Author      struct {
 		Login string `json:"login"`
 	} `json:"author"`
 	RepoURL string `json:"-"`
@@ -102,17 +102,17 @@ func (c *Collector) fetchReleases(ctx context.Context, repo string) ([]model.Ite
 			name = r.TagName
 		}
 		it := model.Item{
-			Source:      "github",
-			SourceID:    fmt.Sprintf("release:%s:%d", repo, r.ID),
-			Author:      r.Author.Login,
-			Title:       fmt.Sprintf("%s %s released", repo, r.TagName),
-			Content:     r.Body,
-			URL:         r.HTMLURL,
+			Source:       "github",
+			SourceID:     fmt.Sprintf("release:%s:%d", repo, r.ID),
+			Author:       r.Author.Login,
+			Title:        fmt.Sprintf("%s %s released", repo, r.TagName),
+			Content:      r.Body,
+			URL:          r.HTMLURL,
 			CanonicalURL: r.HTMLURL,
-			PublishedAt: r.PublishedAt,
-			CollectedAt: now,
-			Topics:      []string{"open-source"},
-			Language:    "en",
+			PublishedAt:  r.PublishedAt,
+			CollectedAt:  now,
+			Topics:       []string{"open-source"},
+			Language:     "en",
 			Metadata: map[string]string{
 				"repo":     repo,
 				"tag":      r.TagName,
@@ -153,19 +153,19 @@ func (c *Collector) fetchOrgRepos(ctx context.Context, org string) ([]model.Item
 			title = title + " — " + r.Description
 		}
 		it := model.Item{
-			Source:      "github",
-			SourceID:    fmt.Sprintf("repo:%s:%d", r.FullName, r.ID),
-			Author:      org,
-			Title:       title,
-			Content:     r.Description,
-			URL:         r.HTMLURL,
+			Source:       "github",
+			SourceID:     fmt.Sprintf("repo:%s:%d", r.FullName, r.ID),
+			Author:       org,
+			Title:        title,
+			Content:      r.Description,
+			URL:          r.HTMLURL,
 			CanonicalURL: r.HTMLURL,
-			PublishedAt: r.CreatedAt,
-			CollectedAt: now,
-			Topics:      []string{"open-source"},
-			Language:    "en",
-			Engagement:  model.Engagement{Score: int64(r.Stars)},
-			Metadata:    map[string]string{"repo": r.FullName, "kind": "new-repo", "language": detectLanguage(r.FullName)},
+			PublishedAt:  r.CreatedAt,
+			CollectedAt:  now,
+			Topics:       []string{"open-source"},
+			Language:     "en",
+			Engagement:   model.Engagement{Score: int64(r.Stars)},
+			Metadata:     map[string]string{"repo": r.FullName, "kind": "new-repo", "language": detectLanguage(r.FullName)},
 		}
 		items = append(items, it)
 	}

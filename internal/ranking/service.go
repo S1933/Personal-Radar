@@ -15,10 +15,10 @@ import (
 
 // Weights of the final score. Configurable in future config revisions.
 var Weights = struct {
-	Relevance      float64
-	Importance     float64
-	Novelty        float64
-	Actionability  float64
+	Relevance       float64
+	Importance      float64
+	Novelty         float64
+	Actionability   float64
 	Personalization float64
 }{0.40, 0.25, 0.15, 0.10, 0.10}
 
@@ -119,14 +119,14 @@ type heuristicScorer struct{}
 var avoidRe = regexp.MustCompile(`(?i)\b(celebrity|sport|kardashian|crypto\s*pump|nft\s*drop|horoscope)\b`)
 
 var topicKeywords = map[string][]string{
-	"ai":                  {"ai", "llm", "gpt", "model", "inference", "agent", "openai", "anthropic", "claude", "gemini", "deepseek", "mistral"},
-	"coding-agents":       {"coding agent", "copilot", "cursor", "code assistant", "agentic", "swe-bench"},
+	"ai":                   {"ai", "llm", "gpt", "model", "inference", "agent", "openai", "anthropic", "claude", "gemini", "deepseek", "mistral"},
+	"coding-agents":        {"coding agent", "copilot", "cursor", "code assistant", "agentic", "swe-bench"},
 	"software-engineering": {"engineering", "developer", "api", "typescript", "rust", "compiler", "refactor", "architecture"},
-	"devops":              {"kubernetes", "docker", "ci/cd", "devops", "terraform", "observability", "deployment"},
-	"open-source":         {"open source", "open-source", "github", "release", "license", "mit", "repository"},
-	"go":                  {"golang", " go ", "goroutine", "go 1.", "go team"},
-	"php":                 {"php", "symfony", "drupal", "laravel", "composer"},
-	"typescript":          {"typescript", "tsx", "bun", "deno", "node.js", "vite"},
+	"devops":               {"kubernetes", "docker", "ci/cd", "devops", "terraform", "observability", "deployment"},
+	"open-source":          {"open source", "open-source", "github", "release", "license", "mit", "repository"},
+	"go":                   {"golang", " go ", "goroutine", "go 1.", "go team"},
+	"php":                  {"php", "symfony", "drupal", "laravel", "composer"},
+	"typescript":           {"typescript", "tsx", "bun", "deno", "node.js", "vite"},
 }
 
 func (h *heuristicScorer) Score(_ context.Context, it store.ScoredItem) (store.Score, error) {

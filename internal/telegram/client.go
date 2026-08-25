@@ -18,9 +18,9 @@ import (
 
 // Client talks to the Telegram Bot API: long-polling updates + sendMessage.
 type Client struct {
-	cfg     config.TelegramConfig
-	log     *logging.Logger
-	client  *http.Client
+	cfg      config.TelegramConfig
+	log      *logging.Logger
+	client   *http.Client
 	handlers map[string]Handler
 }
 

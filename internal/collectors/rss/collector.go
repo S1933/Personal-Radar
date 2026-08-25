@@ -119,18 +119,18 @@ func (c *Collector) collectFeed(ctx context.Context, feed config.RSSFeed) ([]mod
 	now := time.Now().UTC()
 	for _, entry := range parsed.Items {
 		it := model.Item{
-			Source:      "rss",
-			SourceID:    guid(entry, feed.Name),
-			Author:      author(entry),
-			Title:       strings.TrimSpace(entry.Title),
-			Content:     content(entry),
-			URL:         entry.Link,
+			Source:       "rss",
+			SourceID:     guid(entry, feed.Name),
+			Author:       author(entry),
+			Title:        strings.TrimSpace(entry.Title),
+			Content:      content(entry),
+			URL:          entry.Link,
 			CanonicalURL: canonical(entry.Link),
-			PublishedAt: publishedAt(entry, now),
-			CollectedAt: now,
-			Topics:      feed.Topics,
-			Language:    parsed.Language,
-			Metadata:    map[string]string{"feed": feed.Name},
+			PublishedAt:  publishedAt(entry, now),
+			CollectedAt:  now,
+			Topics:       feed.Topics,
+			Language:     parsed.Language,
+			Metadata:     map[string]string{"feed": feed.Name},
 		}
 		if it.Title == "" && it.Content == "" {
 			continue

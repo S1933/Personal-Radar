@@ -11,8 +11,8 @@ func TestHeuristicScoring(t *testing.T) {
 	s := &heuristicScorer{}
 
 	ai := store.ScoredItem{
-		Title:     "OpenAI releases new coding agent SDK",
-		Content:   "The agent SDK for LLM developers is out.",
+		Title:      "OpenAI releases new coding agent SDK",
+		Content:    "The agent SDK for LLM developers is out.",
 		Engagement: 5000,
 	}
 	sc, err := s.Score(context.Background(), ai)

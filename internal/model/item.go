@@ -5,26 +5,26 @@ import "time"
 // Item is the unified normalized record every collector must produce.
 // The pipeline never manipulates source-specific payloads — only Items.
 type Item struct {
-	ID          string
-	Source      string // rss | reddit | github | x | linkedin
-	SourceID    string // unique id within the source
-	Author      string
-	AuthorID    string
-	Title       string
-	Content     string
-	URL         string
+	ID           string
+	Source       string // rss | reddit | github | x | linkedin
+	SourceID     string // unique id within the source
+	Author       string
+	AuthorID     string
+	Title        string
+	Content      string
+	URL          string
 	CanonicalURL string
-	PublishedAt time.Time
-	CollectedAt time.Time
+	PublishedAt  time.Time
+	CollectedAt  time.Time
 
-	Topics    []string
-	Language  string
+	Topics     []string
+	Language   string
 	Engagement Engagement
-	Metadata  map[string]string
+	Metadata   map[string]string
 }
 
 type Engagement struct {
-	Score  int64 // likes/score/points depending on source
+	Score    int64 // likes/score/points depending on source
 	Comments int64
 }
 
