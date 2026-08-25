@@ -47,8 +47,8 @@ rss:
 reddit:
   enabled: true
   subreddits:
+    - opencodeCLI
     - aiagents
-    - MachineLearning
     - LocalLLaMA
     - golang
     - devops

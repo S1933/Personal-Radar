@@ -106,10 +106,14 @@ func (a *App) collectors(ctx context.Context) []ingestion.Collector {
 		out = append(out, rss.NewCollector(a.Cfg.RSS, a.Log.With("sub", "rss")))
 	}
 	if a.Cfg.Reddit.Enabled && len(a.Cfg.Reddit.Subreddits) > 0 {
-		if c, err := reddit.NewCollector(ctx, a.Cfg.Reddit, a.Log.With("sub", "reddit")); err == nil {
+		c, err := reddit.NewCollector(ctx, a.Cfg.Reddit, a.Log.With("sub", "reddit"))
+		if err == nil {
 			out = append(out, c)
 		} else {
-			a.Log.Warn("reddit disabled for this cycle", "error", err)
+			// No OAuth credentials: fall back to the public RSS adapter
+			// (best-effort, same pattern as LinkedIn public pages).
+			a.Log.Warn("reddit oauth unavailable, using public adapter", "error", err.Error())
+			out = append(out, reddit.NewPublicCollector(a.Cfg.Reddit, a.Log.With("sub", "reddit-public")))
 		}
 	}
 	if a.Cfg.GitHub.Enabled && (len(a.Cfg.GitHub.Repositories) > 0 || len(a.Cfg.GitHub.Organizations) > 0) {
