@@ -66,50 +66,63 @@ func (c *PublicCollector) fetchSub(ctx context.Context, sub string) ([]model.Ite
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "personal-radar/0.1")
-
-	res, err := c.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("reddit rss %s: HTTP %d", name, res.StatusCode)
-	}
-
-	parsed, err := c.parser.Parse(res.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	now := time.Now().UTC()
-	var items []model.Item
-	for _, entry := range parsed.Items {
-		link := entry.Link
-		it := model.Item{
-			Source:       "reddit",
-			SourceID:     redditGUID(entry, name),
-			Author:       authorName(entry),
-			Title:        strings.TrimSpace(entry.Title),
-			Content:      entry.Content,
-			URL:          link,
-			CanonicalURL: normalizeURL(link),
-			PublishedAt:  entryPublished(entry, now),
-			CollectedAt:  now,
-			Topics:       topicsFor(name),
-			Language:     "en",
-			Metadata: map[string]string{
-				"subreddit": name,
-				"mode":      "public",
-				"permalink": link,
-			},
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; PersonalRadar/0.1; +https://github.com/S1933/personal-radar)")
+	// Reddit rate-limits anonymous RSS aggressively. Back off and retry a
+	// few times so a transient 429 does not drop the whole subreddit.
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt) * 2 * time.Second)
 		}
-		if it.Title == "" {
+		res, err := c.client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		if res.StatusCode == http.StatusTooManyRequests {
+			res.Body.Close()
+			lastErr = fmt.Errorf("reddit rss %s: HTTP 429", name)
 			continue
 		}
-		items = append(items, it)
+		if res.StatusCode != http.StatusOK {
+			res.Body.Close()
+			return nil, fmt.Errorf("reddit rss %s: HTTP %d", name, res.StatusCode)
+		}
+		parsed, err := c.parser.Parse(res.Body)
+		res.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+		// build items...
+		now := time.Now().UTC()
+		var items []model.Item
+		for _, entry := range parsed.Items {
+			link := entry.Link
+			it := model.Item{
+				Source:       "reddit",
+				SourceID:     redditGUID(entry, name),
+				Author:       authorName(entry),
+				Title:        strings.TrimSpace(entry.Title),
+				Content:      entry.Content,
+				URL:          link,
+				CanonicalURL: normalizeURL(link),
+				PublishedAt:  entryPublished(entry, now),
+				CollectedAt:  now,
+				Topics:       topicsFor(name),
+				Language:     "en",
+				Metadata: map[string]string{
+					"subreddit": name,
+					"mode":      "public",
+					"permalink": link,
+				},
+			}
+			if it.Title == "" {
+				continue
+			}
+			items = append(items, it)
+		}
+		return items, nil
 	}
-	return items, nil
+	return nil, lastErr
 }
 
 // subName extracts the subreddit name from either "golang", "r/golang", or a
