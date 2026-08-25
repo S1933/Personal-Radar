@@ -70,8 +70,12 @@ x:
   queries: []
 
 linkedin:
-  enabled: false
-  pages: []
+  enabled: true
+  pages:
+    - name: OpenAI
+      url: https://www.linkedin.com/company/openai/
+    - name: Anthropic
+      url: https://www.linkedin.com/company/anthropic/
 
 telegram:
   enabled: true

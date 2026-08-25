@@ -8,6 +8,7 @@ import (
 
 	"github.com/S1933/personal-radar/internal/briefing"
 	"github.com/S1933/personal-radar/internal/collectors/github"
+	"github.com/S1933/personal-radar/internal/collectors/linkedin"
 	"github.com/S1933/personal-radar/internal/collectors/reddit"
 	"github.com/S1933/personal-radar/internal/collectors/rss"
 	"github.com/S1933/personal-radar/internal/config"
@@ -122,6 +123,9 @@ func (a *App) collectors(ctx context.Context) []ingestion.Collector {
 		} else {
 			a.Log.Warn("github disabled for this cycle", "error", err)
 		}
+	}
+	if a.Cfg.LinkedIn.Enabled && len(a.Cfg.LinkedIn.Pages) > 0 {
+		out = append(out, linkedin.NewCollector(a.Cfg.LinkedIn, a.Log.With("sub", "linkedin")))
 	}
 	return out
 }
