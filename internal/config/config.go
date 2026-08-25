@@ -165,6 +165,14 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("parse config %s: %w", path, err)
 	}
 	cfg.defaults()
+	// Secrets come from the environment (never from YAML), matching the
+	// database credential pattern. OPENAI_API_KEY feeds the LLM stage.
+	if cfg.Models.APIKey == "" {
+		cfg.Models.APIKey = os.Getenv("OPENAI_API_KEY")
+	}
+	if cfg.Models.BaseURL == "" {
+		cfg.Models.BaseURL = os.Getenv("OPENAI_BASE_URL")
+	}
 	return cfg, nil
 }
 
