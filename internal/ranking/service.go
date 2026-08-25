@@ -38,7 +38,13 @@ type Scorer interface {
 
 func New(models config.ModelsConfig, st *store.Store, log *logging.Logger) *Service {
 	s := &Service{models: models, store: st, log: log}
-	s.scorer = &heuristicScorer{}
+	// Stage-2 LLM ranker is active only when an endpoint + key are set;
+	// otherwise the deterministic heuristic remains the default (POC).
+	if models.BaseURL != "" && models.APIKey != "" {
+		s.scorer = newLLMScorer(models)
+	} else {
+		s.scorer = &heuristicScorer{}
+	}
 	return s
 }
 

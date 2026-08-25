@@ -77,7 +77,7 @@ telegram:
   enabled: true
 
 models:
-  base_url: https://api.opencode.ai/v1
+  base_url: https://opencode.ai/zen/go/v1
   filter:
     model: deepseek-v4-flash
   rank:
