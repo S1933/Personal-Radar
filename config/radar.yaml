@@ -87,6 +87,7 @@ telegram:
 
 models:
   base_url: https://opencode.ai/zen/go/v1
+  llm_rank: false  # Stage-2 LLM scoring is slow (1 call/item); heuristic is default
   filter:
     model: deepseek-v4-flash
   rank:

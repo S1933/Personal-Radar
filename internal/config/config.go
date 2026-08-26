@@ -133,12 +133,13 @@ type TelegramConfig struct {
 }
 
 type ModelsConfig struct {
-	BaseURL string         `yaml:"base_url"` // OpenAI-compatible endpoint
-	APIKey  string         `yaml:"api_key"`
-	Filter  ModelConfig    `yaml:"filter"`
-	Rank    ModelConfig    `yaml:"rank"`
-	Synth   ModelConfig    `yaml:"synthesis"`
-	DeepDive ModelConfig   `yaml:"deepdive"`
+	BaseURL string      `yaml:"base_url"` // OpenAI-compatible endpoint
+	APIKey  string      `yaml:"api_key"`
+	LLMRank bool        `yaml:"llm_rank"` // use LLM for Stage-2 scoring (slow; off by default)
+	Filter  ModelConfig `yaml:"filter"`
+	Rank    ModelConfig `yaml:"rank"`
+	Synth   ModelConfig `yaml:"synthesis"`
+	DeepDive ModelConfig `yaml:"deepdive"`
 }
 
 type ModelConfig struct {
