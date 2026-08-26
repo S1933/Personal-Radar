@@ -75,7 +75,7 @@ async def collect(accounts, queries, limit):
                               "detail": str(e)}), file=sys.stderr)
             continue
         async for t in tweets:
-            out.append(_item(t, t.author))
+            out.append(_item(t, t.user.username if t.user else "unknown"))
 
     # dedupe by tweet id
     uniq = []
