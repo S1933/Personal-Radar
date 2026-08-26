@@ -1,10 +1,37 @@
+# Binaries / build output
 bin/
+dist/
+*.exe
 *.test
-secrets/
+
+# Secrets (NEVER commit)
 .env
-data/
+.env.*
+!.env.example
+secrets/
+
+# Python (twscrape sidecar)
 .venv/
-.venv/x_accounts.db
-accounts.db
+venv/
 __pycache__/
 *.pyc
+*.db
+accounts.db
+*.db-journal
+
+# Go
+vendor/
+
+# Node (if any tooling)
+node_modules/
+
+# Editor / OS
+.DS_Store
+*.swp
+.idea/
+
+# Runtime / temp
+data/
+tmp/
+scratch/
+*.log
