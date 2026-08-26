@@ -94,7 +94,7 @@ func (s *Store) UnscoredItems(ctx context.Context, since time.Duration) ([]Score
 		WHERE s.item_id IS NULL
 		  AND i.collected_at > now() - make_interval(secs => $1)
 		ORDER BY i.collected_at DESC
-		LIMIT 500`, int64(since.Seconds()))
+		LIMIT 150`, int64(since.Seconds()))
 }
 
 // TopScoredItems returns the best items collected since the given duration,

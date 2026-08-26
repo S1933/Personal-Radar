@@ -67,8 +67,11 @@ func (s *Service) RankPending(ctx context.Context) (int, error) {
 	for _, it := range items {
 		sc, err := s.scorer.Score(ctx, it)
 		if err != nil {
-			s.log.Warn("score item", "id", it.DBID, "error", err)
-			continue
+			// LLM stage failed (rate-limit, parse) — fall back to the
+			// deterministic heuristic so the item is still scored and the
+			// pending queue does not loop forever on the same items.
+			s.log.Warn("score item (llm failed, heuristic fallback)", "id", it.DBID, "error", err)
+			sc, _ = (&heuristicScorer{}).Score(ctx, it)
 		}
 		sc.Personalization = personalizationScore(it, prefs)
 		sc.Final = finalScore(sc)
