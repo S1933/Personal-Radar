@@ -3,3 +3,7 @@ bin/
 secrets/
 .env
 data/
+.venv/
+.venv/x_accounts.db
+__pycache__/
+*.pyc
