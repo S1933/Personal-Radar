@@ -91,4 +91,4 @@ models:
 
 obsidian:
   enabled: true
-  vault_path: /data/obsidian
+  vault_path: /home/pi/obsidian/Hermes
