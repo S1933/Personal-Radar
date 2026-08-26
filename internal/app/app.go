@@ -11,6 +11,7 @@ import (
 	"github.com/S1933/personal-radar/internal/collectors/linkedin"
 	"github.com/S1933/personal-radar/internal/collectors/reddit"
 	"github.com/S1933/personal-radar/internal/collectors/rss"
+	"github.com/S1933/personal-radar/internal/collectors/x"
 	"github.com/S1933/personal-radar/internal/config"
 	"github.com/S1933/personal-radar/internal/db"
 	"github.com/S1933/personal-radar/internal/dedup"
@@ -128,6 +129,14 @@ func (a *App) collectors(ctx context.Context) []ingestion.Collector {
 	}
 	if a.Cfg.LinkedIn.Enabled && len(a.Cfg.LinkedIn.Pages) > 0 {
 		out = append(out, linkedin.NewCollector(a.Cfg.LinkedIn, a.Log.With("sub", "linkedin")))
+	}
+	if a.Cfg.X.Enabled && (len(a.Cfg.X.Accounts) > 0 || len(a.Cfg.X.Queries) > 0) {
+		c, err := x.NewCollector(a.Cfg.X, a.Log.With("sub", "x"))
+		if err != nil {
+			a.Log.Warn("x disabled", "error", err.Error())
+		} else {
+			out = append(out, c)
+		}
 	}
 	return out
 }

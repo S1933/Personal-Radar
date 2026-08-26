@@ -108,9 +108,12 @@ type GitHubConfig struct {
 }
 
 type XConfig struct {
-	Enabled  bool     `yaml:"enabled"`
-	Accounts []string `yaml:"accounts"`
-	Queries  []string `yaml:"queries"`
+	Enabled     bool     `yaml:"enabled"`
+	Accounts    []string `yaml:"accounts"`
+	Queries     []string `yaml:"queries"`
+	APIKey      string   `yaml:"-"` // from env X_API_KEY
+	APISecret   string   `yaml:"-"` // from env X_API_SECRET
+	BearerToken string   `yaml:"-"` // from env X_BEARER_TOKEN
 }
 
 type LinkedInConfig struct {
@@ -173,6 +176,12 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if cfg.Models.BaseURL == "" {
 		cfg.Models.BaseURL = os.Getenv("OPENAI_BASE_URL")
+	}
+	// X API credentials (Bearer token for app-level reads).
+	if cfg.X.Enabled {
+		cfg.X.APIKey = os.Getenv("X_API_KEY")
+		cfg.X.APISecret = os.Getenv("X_API_SECRET")
+		cfg.X.BearerToken = os.Getenv("X_BEARER_TOKEN")
 	}
 	return cfg, nil
 }

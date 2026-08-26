@@ -65,9 +65,14 @@ github:
   topics: []
 
 x:
-  enabled: false
-  accounts: []
-  queries: []
+  enabled: true
+  accounts:
+    - openai
+    - anthropicai
+    - huggingface
+  queries:
+    - "coding agent"
+    - "AI agent framework"
 
 linkedin:
   enabled: true
