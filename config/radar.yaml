@@ -65,7 +65,7 @@ github:
   topics: []
 
 x:
-  enabled: false
+  enabled: true
   accounts:
     - openai
     - anthropicai

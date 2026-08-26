@@ -177,10 +177,17 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.Models.BaseURL == "" {
 		cfg.Models.BaseURL = os.Getenv("OPENAI_BASE_URL")
 	}
-	// X API credentials (Bearer token for app-level reads).
+	// X session cookies for the twscrape sidecar (auth_token + ct0).
 	if cfg.X.Enabled {
-		cfg.X.APIKey = os.Getenv("X_API_KEY")
-		cfg.X.APISecret = os.Getenv("X_API_SECRET")
+		if v := os.Getenv("X_AUTH_TOKEN"); v != "" {
+			cfg.X.APIKey = v // reused as auth_token cookie
+		}
+		if v := os.Getenv("X_API_SECRET"); v != "" {
+			cfg.X.APISecret = v // reserved for future app-level auth
+		}
+		if v := os.Getenv("X_CT0"); v != "" {
+			cfg.X.APISecret = v // ct0 cookie (overrides API_SECRET if both set)
+		}
 		cfg.X.BearerToken = os.Getenv("X_BEARER_TOKEN")
 	}
 	return cfg, nil

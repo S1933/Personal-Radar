@@ -26,14 +26,25 @@ async def collect(accounts, queries, limit):
     db = os.environ.get("TWSCRAPE_DB", "x_accounts.db")
     api = API(db)
 
+    # Ensure the session cookie from env is registered (idempotent).
+    auth = os.environ.get("X_AUTH_TOKEN")
+    ct0 = os.environ.get("X_CT0")
+    if auth and ct0:
+        try:
+            await api.pool.add_account_cookies("radar_session",
+                                               f"auth_token={auth}; ct0={ct0}")
+        except Exception as e:  # noqa: BLE001
+            print(json.dumps({"warn": "add_cookie", "detail": str(e)}),
+                  file=sys.stderr)
+
     try:
         infos = await api.pool.accounts_info()
     except Exception:  # noqa: BLE001
         infos = []
-    active = sum(1 for a in infos if getattr(a, "active", False) or getattr(a, "status", "") == "active")
+    active = sum(1 for a in infos if a.get("active") is True)
     if active == 0:
         print(json.dumps({"error": "no_active_accounts",
-                          "hint": "run: twscrape add_cookie <name>"}),
+                          "hint": "set X_AUTH_TOKEN + X_CT0 env"}),
               file=sys.stderr)
         return []
 
@@ -52,18 +63,18 @@ async def collect(accounts, queries, limit):
             print(json.dumps({"error": "user_not_found", "handle": handle}),
                   file=sys.stderr)
             continue
-        tweets = await gather(api.user_tweets(user.id, limit=limit))
-        for t in tweets:
+        tweets = api.user_tweets(user.id, limit=limit)
+        async for t in tweets:
             out.append(_item(t, handle))
 
     for q in queries:
         try:
-            tweets = await gather(api.search(q, limit=limit))
+            tweets = api.search(q, limit=limit)
         except Exception as e:  # noqa: BLE001
             print(json.dumps({"error": "search", "query": q,
                               "detail": str(e)}), file=sys.stderr)
             continue
-        for t in tweets:
+        async for t in tweets:
             out.append(_item(t, t.author))
 
     # dedupe by tweet id
@@ -78,7 +89,7 @@ async def collect(accounts, queries, limit):
 
 def _item(t, handle):
     text = t.rawContent or t.text or ""
-    author = handle or (t.author.username if t.author else "unknown")
+    author = handle or (t.user.username if t.user else "unknown")
     return {
         "source": "x",
         "source_id": "x:" + str(t.id),

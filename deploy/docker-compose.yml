@@ -35,6 +35,8 @@ services:
       REDDIT_CLIENT_SECRET: ${REDDIT_CLIENT_SECRET}
       GITHUB_TOKEN: ${GITHUB_TOKEN}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      X_AUTH_TOKEN: ${X_AUTH_TOKEN}
+      X_CT0: ${X_CT0}
     volumes:
       - ../config:/app/config:ro
       - /home/pi/obsidian/Hermes:/data/obsidian

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/S1933/personal-radar/internal/briefing"
@@ -131,7 +132,15 @@ func (a *App) collectors(ctx context.Context) []ingestion.Collector {
 		out = append(out, linkedin.NewCollector(a.Cfg.LinkedIn, a.Log.With("sub", "linkedin")))
 	}
 	if a.Cfg.X.Enabled && (len(a.Cfg.X.Accounts) > 0 || len(a.Cfg.X.Queries) > 0) {
-		c, err := x.NewCollector(a.Cfg.X, a.Log.With("sub", "x"))
+		py := os.Getenv("X_PYTHON")
+		if py == "" {
+			py = "/usr/bin/python3" // system python with twscrape (Docker image)
+		}
+		c, err := x.NewCollector(a.Cfg.X, a.Log.With("sub", "x"),
+			x.WithScriptPath("xscraper/collect.py"),
+			x.WithVenvPython(py),
+			x.WithTwscrapeDB("/app/x_accounts.db"),
+		)
 		if err != nil {
 			a.Log.Warn("x disabled", "error", err.Error())
 		} else {

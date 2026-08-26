@@ -1,247 +1,166 @@
 package x
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
-	"strings"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"time"
 
 	"github.com/S1933/personal-radar/internal/config"
 	"github.com/S1933/personal-radar/internal/model"
 )
 
-// Collector reads recent posts from a fixed set of X accounts. Reading the
-// authenticated user's full timeline requires an Elevated/Enterprise tier,
-// which is out of scope for the POC; instead we poll specific accounts the
-// user wants to watch (config: x.accounts). This mirrors the "targeted
-// sources" approach used by the other connectors.
+// Collector pulls recent tweets from targeted X accounts via the twscrape
+// sidecar (Python). twscrape uses an authenticated X session (cookies from
+// X_AUTH_TOKEN / X_CT0 env vars) to call X's internal GraphQL endpoints,
+// bypassing the paid API tier. The session is required and managed by the
+// user; the radar only orchestrates the sidecar.
 type Collector struct {
-	cfg    config.XConfig
-	log    Logger
-	client *http.Client
+	cfg        config.XConfig
+	log        Logger
+	scriptPath string
+	venvPython string
+	twscrapeDB string
+	timeout    time.Duration
 }
 
 type Logger interface {
 	Warn(msg string, kv ...any)
 }
 
-func NewCollector(cfg config.XConfig, log Logger) (*Collector, error) {
-	if cfg.BearerToken == "" {
-		return nil, fmt.Errorf("x: X_BEARER_TOKEN required")
+// NewCollector wires the twscrape sidecar. scriptPath is the absolute path to
+// xscraper/collect.py; if empty it is resolved relative to the repo root.
+func NewCollector(cfg config.XConfig, log Logger, opts ...Option) (*Collector, error) {
+	if len(cfg.Accounts) == 0 && len(cfg.Queries) == 0 {
+		return nil, fmt.Errorf("x: no accounts or queries configured")
 	}
-	return &Collector{
-		cfg:    cfg,
-		log:    log,
-		client: &http.Client{Timeout: 30 * time.Second},
-	}, nil
+	c := &Collector{
+		cfg:        cfg,
+		log:        log,
+		scriptPath: "xscraper/collect.py",
+		venvPython: "python3",
+		twscrapeDB: "x_accounts.db",
+		timeout:    60 * time.Second,
+	}
+	for _, o := range opts {
+		o(c)
+	}
+	return c, nil
 }
+
+// Option overrides collector defaults (used in tests / deployment).
+type Option func(*Collector)
+
+func WithScriptPath(p string) Option        { return func(c *Collector) { c.scriptPath = p } }
+func WithVenvPython(p string) Option        { return func(c *Collector) { c.venvPython = p } }
+func WithTwscrapeDB(p string) Option        { return func(c *Collector) { c.twscrapeDB = p } }
+func WithTimeout(d time.Duration) Option    { return func(c *Collector) { c.timeout = d } }
 
 func (c *Collector) Name() string { return "x" }
 
+// Collect invokes the twscrape sidecar and parses its JSON output.
 func (c *Collector) Collect(ctx context.Context) ([]model.Item, error) {
-	if len(c.cfg.Accounts) == 0 && len(c.cfg.Queries) == 0 {
-		return nil, nil
+	args := []string{c.scriptPath, "--limit", "15"}
+	for _, a := range c.cfg.Accounts {
+		args = append(args, "--accounts", a)
 	}
-	var items []model.Item
-	var lastErr error
-
-	// Targeted accounts: fetch recent tweets per handle.
-	for _, handle := range c.cfg.Accounts {
-		posts, err := c.fetchUserTweets(ctx, handle)
-		if err != nil {
-			c.log.Warn("x account failed", "handle", handle, "error", err)
-			lastErr = err
-			continue
-		}
-		items = append(items, posts...)
-	}
-
-	// Keyword queries: recent search.
 	for _, q := range c.cfg.Queries {
-		posts, err := c.searchRecent(ctx, q)
-		if err != nil {
-			c.log.Warn("x query failed", "query", q, "error", err)
-			lastErr = err
-			continue
-		}
-		items = append(items, posts...)
+		args = append(args, "--queries", q)
 	}
 
-	if len(items) == 0 && lastErr != nil {
-		return nil, lastErr
-	}
-	return items, nil
-}
+	cmd := exec.CommandContext(ctx, c.venvPython, args...)
+	cmd.Env = append(os.Environ(),
+		"X_AUTH_TOKEN="+c.cfg.APIKey, // reused as auth_token cookie
+		"X_CT0="+c.cfg.APISecret,     // reused as ct0 cookie
+		"TWSCRAPE_DB="+c.twscrapeDB,
+	)
 
-// fetchUserTweets resolves the user id then pulls recent tweets.
-func (c *Collector) fetchUserTweets(ctx context.Context, handle string) ([]model.Item, error) {
-	handle = strings.TrimPrefix(handle, "@")
-	id, err := c.resolveUserID(ctx, handle)
-	if err != nil {
-		return nil, err
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("x sidecar failed: %w: %s", err, stderr.String())
 	}
-	return c.getTweets(ctx, "https://api.twitter.com/2/users/"+id+"/tweets?"+
-		url.Values{
-			"max_results":      {"10"},
-			"tweet.fields":     {"created_at,public_metrics,entities"},
-			"expansions":       {"author_id"},
-			"user.fields":      {"username,name"},
-			"exclude":         {"retweets,replies"},
-		}.Encode())
-}
 
-func (c *Collector) searchRecent(ctx context.Context, query string) ([]model.Item, error) {
-	return c.getTweets(ctx, "https://api.twitter.com/2/tweets/search/recent?"+
-		url.Values{
-			"query":       {query + " -is:retweet"},
-			"max_results": {"10"},
-			"tweet.fields": {"created_at,public_metrics,entities"},
-			"expansions":  {"author_id"},
-			"user.fields": {"username,name"},
-		}.Encode())
-}
-
-func (c *Collector) resolveUserID(ctx context.Context, handle string) (string, error) {
-	u := "https://api.twitter.com/2/users/by/username/" + url.PathEscape(handle) +
-		"?user.fields=username,name"
-	resp, err := c.do(ctx, u)
-	if err != nil {
-		return "", err
+	var raw []struct {
+		SourceID    string            `json:"source_id"`
+		Author      string            `json:"author"`
+		Title       string            `json:"title"`
+		URL         string            `json:"url"`
+		Content     string            `json:"content"`
+		PublishedAt *time.Time        `json:"published_at"`
+		Topics      []string          `json:"topics"`
+		Language    string            `json:"language"`
+		Metadata    map[string]any    `json:"metadata"`
 	}
-	var parsed struct {
-		Data struct {
-			ID       string `json:"id"`
-			Username string `json:"username"`
-			Name     string `json:"name"`
-		} `json:"data"`
-		Errors []struct {
-			Title  string `json:"title"`
-			Detail string `json:"detail"`
-		} `json:"errors"`
-	}
-	if err := json.NewDecoder(resp).Decode(&parsed); err != nil {
-		return "", fmt.Errorf("x: decode user: %w", err)
-	}
-	if parsed.Data.ID == "" {
-		if len(parsed.Errors) > 0 {
-			return "", fmt.Errorf("x: %s: %s", parsed.Errors[0].Title, parsed.Errors[0].Detail)
-		}
-		return "", fmt.Errorf("x: user %q not found", handle)
-	}
-	return parsed.Data.ID, nil
-}
-
-func (c *Collector) getTweets(ctx context.Context, endpoint string) ([]model.Item, error) {
-	resp, err := c.do(ctx, endpoint)
-	if err != nil {
-		return nil, err
-	}
-	var parsed struct {
-		Data []struct {
-			ID        string `json:"id"`
-			Text      string `json:"text"`
-			CreatedAt string `json:"created_at"`
-		} `json:"data"`
-		Includes struct {
-			Users []struct {
-				ID       string `json:"id"`
-				Username string `json:"username"`
-				Name     string `json:"name"`
-			} `json:"users"`
-		} `json:"includes"`
-		Errors []struct {
-			Title  string `json:"title"`
-			Detail string `json:"detail"`
-		} `json:"errors"`
-	}
-	if err := json.NewDecoder(resp).Decode(&parsed); err != nil {
-		return nil, fmt.Errorf("x: decode tweets: %w", err)
-	}
-	if len(parsed.Data) == 0 {
-		if len(parsed.Errors) > 0 {
-			return nil, fmt.Errorf("x: %s: %s", parsed.Errors[0].Title, parsed.Errors[0].Detail)
-		}
-		return nil, nil
-	}
-	userByID := map[string]struct {
-		Username string
-		Name     string
-	}{}
-	for _, u := range parsed.Includes.Users {
-		userByID[u.ID] = struct {
-			Username string
-			Name     string
-		}{u.Username, u.Name}
+	if err := json.Unmarshal(stdout.Bytes(), &raw); err != nil {
+		return nil, fmt.Errorf("x: parse sidecar output: %w", err)
 	}
 
 	now := time.Now().UTC()
-	var items []model.Item
-	for _, t := range parsed.Data {
-		author := handleFrom(parsed.Includes.Users, t.ID)
+	items := make([]model.Item, 0, len(raw))
+	for _, r := range raw {
+		if r.SourceID == "" {
+			continue
+		}
 		it := model.Item{
 			Source:      "x",
-			SourceID:    "x:" + t.ID,
-			Author:      author,
-			Title:       firstLine(t.Text),
-			URL:         "https://twitter.com/" + author + "/status/" + t.ID,
-			Content:     t.Text,
+			SourceID:    r.SourceID,
+			Author:      r.Author,
+			Title:       r.Title,
+			URL:         r.URL,
+			Content:     r.Content,
 			PublishedAt: now,
 			CollectedAt: now,
-			Topics:      []string{"software-engineering", "open-source"},
-			Language:    "en",
-			Metadata: map[string]string{
-				"mode": "targeted-account",
-			},
+			Topics:      r.Topics,
+			Language:    r.Language,
+			Metadata:    toStringMap(r.Metadata),
 		}
-		if ta, err := time.Parse(time.RFC3339, t.CreatedAt); err == nil {
-			it.PublishedAt = ta
+		if r.PublishedAt != nil {
+			it.PublishedAt = *r.PublishedAt
+		}
+		if it.Language == "" {
+			it.Language = "en"
+		}
+		if len(it.Topics) == 0 {
+			it.Topics = []string{"software-engineering", "open-source"}
 		}
 		items = append(items, it)
 	}
 	return items, nil
 }
 
-func (c *Collector) do(ctx context.Context, endpoint string) (io.Reader, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, err
+// repoRoot returns the project root by walking up from this file until it
+// finds go.mod (used to resolve the xscraper script at runtime).
+func repoRoot() string {
+	dir, _ := os.Getwd()
+	for i := 0; i < 6; i++ {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		dir = filepath.Dir(dir)
 	}
-	req.Header.Set("Authorization", "Bearer "+c.cfg.BearerToken)
-	res, err := c.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	if res.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(io.LimitReader(res.Body, 512))
-		res.Body.Close()
-		return nil, fmt.Errorf("x: HTTP %d %s", res.StatusCode, string(b))
-	}
-	return res.Body, nil
+	return "."
 }
 
-func handleFrom(users []struct {
-	ID       string `json:"id"`
-	Username string `json:"username"`
-	Name     string `json:"name"`
-}, tweetAuthorID string) string {
-	for _, u := range users {
-		if u.ID == tweetAuthorID {
-			return u.Username
+func toStringMap(in map[string]any) map[string]string {
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		switch val := v.(type) {
+		case string:
+			out[k] = val
+		case nil:
+			out[k] = ""
+		default:
+			out[k] = fmt.Sprintf("%v", val)
 		}
 	}
-	return "unknown"
-}
-
-func firstLine(s string) string {
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		return s[:i]
+	if len(out) == 0 {
+		return nil
 	}
-	if len(s) > 120 {
-		return s[:117] + "..."
-	}
-	return s
+	return out
 }
