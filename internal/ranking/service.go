@@ -31,6 +31,10 @@ type Service struct {
 	scorer Scorer
 }
 
+// ModelsConfig exposes the loaded model configuration (used by the briefing
+// synthesizer to reuse the same endpoint/key).
+func (s *Service) ModelsConfig() config.ModelsConfig { return s.models }
+
 // Scorer produces sub-scores for one item (heuristic or LLM-backed).
 type Scorer interface {
 	Score(ctx context.Context, it store.ScoredItem) (store.Score, error)

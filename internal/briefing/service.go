@@ -27,6 +27,7 @@ type Service struct {
 	opts     Options
 	store    *store.Store
 	ranker   *ranking.Service
+	synth    *synthesizer
 	log      *logging.Logger
 	telegram Sender
 }
@@ -37,7 +38,12 @@ type Sender interface {
 }
 
 func New(opts Options, st *store.Store, ranker *ranking.Service, log *logging.Logger) *Service {
-	return &Service{opts: opts, store: st, ranker: ranker, log: log}
+	s := &Service{opts: opts, store: st, ranker: ranker, log: log}
+	// Stage-2 LLM synthesis is active only when an endpoint + key are set.
+	if cfg := ranker.ModelsConfig(); cfg.BaseURL != "" && cfg.APIKey != "" {
+		s.synth = newSynthesizer(cfg)
+	}
+	return s
 }
 
 func (s *Service) SetTelegram(tg Sender) { s.telegram = tg }
@@ -70,7 +76,7 @@ func (s *Service) Generate(ctx context.Context, opts ...context.Context) (string
 
 	trends := s.detectTrends(items)
 
-	content := s.render(selected, trends)
+	content := s.render(ctx, selected, trends)
 
 	date := time.Now().In(s.loc()).Format("2006-01-02")
 	ids := make([]int64, 0, len(selected))
@@ -171,7 +177,7 @@ func (s *Service) loc() *time.Location {
 	return time.UTC
 }
 
-func (s *Service) render(items []store.ScoredItem, trends []string) string {
+func (s *Service) render(ctx context.Context, items []store.ScoredItem, trends []string) string {
 	var b strings.Builder
 	now := time.Now().In(s.loc())
 	fmt.Fprintf(&b, "☀️ *DAILY RADAR*\n%s\n\n", now.Format("Monday 2 January 2006"))
@@ -185,6 +191,12 @@ func (s *Service) render(items []store.ScoredItem, trends []string) string {
 	for i, it := range items {
 		score := fmt.Sprintf("%.2f", it.Score.Final)
 		fmt.Fprintf(&b, "%d. [%s](%s)\n   _%s · ⭐ %s_\n", i+1, escape(it.Title), it.URL, it.Source, score)
+		// Optional LLM "why it matters" line (best-effort).
+		if s.synth != nil {
+			if why, err := s.synth.Rationale(ctx, it.Title, it.Content, it.Source); err == nil && why != "" {
+				fmt.Fprintf(&b, "   💡 %s\n", why)
+			}
+		}
 	}
 
 	if len(trends) > 0 {

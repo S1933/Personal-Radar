@@ -87,7 +87,7 @@ models:
   rank:
     model: minimax-m3
   synthesis:
-    model: glm-5.3
+    model: deepseek-v4-flash
 
 obsidian:
   enabled: true
