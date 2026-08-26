@@ -65,7 +65,7 @@ func (d *DeepDive) Analyze(ctx context.Context, it model.Item) (string, error) {
 	body, err := json.Marshal(map[string]any{
 		"model": d.model,
 		"messages": []map[string]string{
-			{"role": "system", "content": "You are a senior backend engineer's research assistant. Be precise, technical, no fluff. Use markdown."},
+			{"role": "system", "content": "Tu es l'assistant de recherche d'un ingénieur backend senior. Réponds toujours en français, de façon précise et technique, sans fluff. Utilise le markdown."},
 			{"role": "user", "content": prompt},
 		},
 		"temperature": 0.4,
@@ -128,26 +128,26 @@ func buildDeepDivePrompt(it model.Item) string {
 	if len(content) > 4000 {
 		content = content[:4000] + "..."
 	}
-	return fmt.Sprintf(`Analyze this item for a senior backend engineer (Go, PHP/Symfony, AI agents, dev tooling):
+	return fmt.Sprintf(`Analyse cet item pour un ingénieur backend senior (Go, PHP/Symfony, agents IA, outillage développeur). Réponds obligatoirement en français.
 
-Title: %s
-Source: %s
-Author: %s
-URL: %s
-Topics:
+Titre : %s
+Source : %s
+Auteur : %s
+URL : %s
+Sujets :
 %s
 
-Content:
+Contenu :
 %s
 
-Produce a concise markdown analysis with these sections:
+Produis une analyse markdown concise avec ces sections :
 ## 🔍 Résumé
-(2-3 sentences, what it actually is)
+(2-3 phrases, en quoi ça consiste réellement)
 ## 🔑 Points clés
-(bullet list, technical facts)
+(liste à puces, faits techniques)
 ## 💡 Pourquoi ça compte
-(impact on backend/AI agent work, concrete)
+(impact concret sur le travail backend / agents IA)
 ## 🚀 Next steps
-(what to read/do next, with the URL above)`,
+(que lire/faire ensuite, en citant l'URL ci-dessus)`,
 		it.Title, it.Source, it.Author, it.URL, topics, content)
 }

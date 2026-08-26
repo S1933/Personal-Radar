@@ -34,13 +34,13 @@ func newSynthesizer(cfg config.ModelsConfig) *synthesizer {
 // Rationale asks the LLM for a one-line "why this matters" for an item.
 func (s *synthesizer) Rationale(ctx context.Context, title, content, source string) (string, error) {
 	prompt := fmt.Sprintf(
-		"Source: %s\nTitle: %s\nExcerpt: %s\n\nIn one concise sentence (max 140 chars), explain why this matters to a backend/senior engineer interested in AI agents, Go, and developer tooling.",
+		"Source: %s\nTitre: %s\nExtrait: %s\n\nEn une seule phrase concise (max 140 caractères), en français, explique pourquoi cet item intéresse un ingénieur backend senior passionné par les agents IA, Go et l'outillage développeur.",
 		source, title, truncate(content, 600))
 
 	body, err := json.Marshal(map[string]any{
 		"model": s.model,
 		"messages": []map[string]string{
-			{"role": "system", "content": "You are a sharp tech radar editor. Be concise, no fluff, no marketing."},
+			{"role": "system", "content": "Tu es un éditeur de veille tech percutant. Réponds toujours en français, de façon concise, sans marketing, sans fluff."},
 			{"role": "user", "content": prompt},
 		},
 		"temperature": 0.3,
