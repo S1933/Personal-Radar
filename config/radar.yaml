@@ -90,7 +90,7 @@ models:
   filter:
     model: deepseek-v4-flash
   rank:
-    model: minimax-m3
+    model: deepseek-v4-flash
   synthesis:
     model: deepseek-v4-flash
   deepdive:

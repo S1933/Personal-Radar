@@ -38,7 +38,6 @@ func (s *llmScorer) Score(ctx context.Context, it store.ScoredItem) (store.Score
 			{"role": "user", "content": prompt},
 		},
 		"temperature": 0,
-		"response_format": map[string]string{"type": "json_object"},
 	})
 	if err != nil {
 		return store.Score{}, err
