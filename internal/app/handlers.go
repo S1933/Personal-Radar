@@ -110,7 +110,7 @@ func (h *commandHandler) Handle(ctx context.Context, cmd telegram.Command) (stri
 		if cmd.ItemID == 0 {
 			return "", fmt.Errorf("usage: /deepdive <id>")
 		}
-		return "🔬 Deep dive bientôt disponible (Phase 12).", nil
+		return a.DeepDiveItem(ctx, int64(cmd.ItemID))
 	}
 	return "", nil
 }

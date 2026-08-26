@@ -88,6 +88,8 @@ models:
     model: minimax-m3
   synthesis:
     model: deepseek-v4-flash
+  deepdive:
+    model: deepseek-v4-flash
 
 obsidian:
   enabled: true

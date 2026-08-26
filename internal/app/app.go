@@ -38,6 +38,7 @@ type App struct {
 	Briefer   *briefing.Service
 	Telegram  *telegram.Client
 	Scheduler *scheduler.Scheduler
+	DeepDive  *DeepDive
 }
 
 // New builds the App: opens the DB pool and wires services. Collectors are
@@ -84,6 +85,7 @@ func New(ctx context.Context, cfg *config.Config, log *logging.Logger) (*App, er
 		Briefer:   briefer,
 		Telegram:  tg,
 		Scheduler: scheduler.New(log.With("sub", "scheduler")),
+		DeepDive:  NewDeepDive(cfg.Models),
 	}
 	return app, nil
 }

@@ -84,13 +84,13 @@ func (s *synthesizer) Rationale(ctx context.Context, title, content, source stri
 	if len(parsed.Choices) == 0 {
 		return "", fmt.Errorf("synthesis: empty choices")
 	}
-	content := parsed.Choices[0].Message.Content
+	result := parsed.Choices[0].Message.Content
 	// Some reasoning models (e.g. glm-5.3) emit the answer in
 	// reasoning_content and leave content empty.
-	if content == "" {
-		content = parsed.Choices[0].Message.ReasoningContent
+	if result == "" {
+		result = parsed.Choices[0].Message.ReasoningContent
 	}
-	return cleanRationale(content), nil
+	return cleanRationale(result), nil
 }
 
 func cleanRationale(s string) string {
