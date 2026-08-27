@@ -58,6 +58,7 @@ rss:
 
 reddit:
   enabled: true
+  every: 60m   # own poll interval (throttled 2.5s/sub) to avoid 429 from Reddit edge
   subreddits:
     - opencodeCLI
     - aiagents

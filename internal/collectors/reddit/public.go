@@ -37,10 +37,23 @@ func NewPublicCollector(cfg config.RedditConfig, log Logger) *PublicCollector {
 
 func (c *PublicCollector) Name() string { return "reddit-public" }
 
+// redditThrottle is the minimum spacing between subreddit requests so we stay
+// under Reddit's anonymous-RSS rate limit (the 429s came from firing 17
+// requests in a tight loop). 2.5s/sub * 17 subs ≈ 42s per cycle — well within
+// a 60m poll and gentle on Reddit's edge.
+const redditThrottle = 2500 * time.Millisecond
+
 func (c *PublicCollector) Collect(ctx context.Context) ([]model.Item, error) {
 	var items []model.Item
 	var lastErr error
-	for _, sub := range c.cfg.Subreddits {
+	for i, sub := range c.cfg.Subreddits {
+		if i > 0 {
+			select {
+			case <-ctx.Done():
+				return items, ctx.Err()
+			case <-time.After(redditThrottle):
+			}
+		}
 		feed, err := c.fetchSub(ctx, sub)
 		if err != nil {
 			c.log.Warn("reddit public feed failed", "sub", sub, "error", err)
@@ -66,7 +79,7 @@ func (c *PublicCollector) fetchSub(ctx context.Context, sub string) ([]model.Ite
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; PersonalRadar/0.1; +https://github.com/S1933/personal-radar)")
+	req.Header.Set("User-Agent", "PersonalRadar/0.1 (by /u/jenue1933; contact: jeanphilippenuel@gmail.com; +https://github.com/S1933/personal-radar)")
 	// Reddit rate-limits anonymous RSS aggressively. Back off and retry a
 	// few times so a transient 429 does not drop the whole subreddit.
 	var lastErr error

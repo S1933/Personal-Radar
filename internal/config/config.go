@@ -94,10 +94,11 @@ type RSSFeed struct {
 }
 
 type RedditConfig struct {
-	Enabled    bool     `yaml:"enabled"`
-	Subreddits []string `yaml:"subreddits"`
-	Listing    string   `yaml:"listing"` // hot | new | rising | top
-	Limit      int      `yaml:"limit"`   // posts per subreddit per poll
+	Enabled    bool          `yaml:"enabled"`
+	Subreddits []string      `yaml:"subreddits"`
+	Listing    string        `yaml:"listing"` // hot | new | rising | top
+	Limit      int           `yaml:"limit"`   // posts per subreddit per poll
+	Every      time.Duration `yaml:"every"`   // own poll interval (e.g. 60m); 0 = global collect cycle
 }
 
 type GitHubConfig struct {

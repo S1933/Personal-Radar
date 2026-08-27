@@ -110,7 +110,7 @@ func (a *App) collectors(ctx context.Context) []ingestion.Collector {
 	if a.Cfg.RSS.Enabled && len(a.Cfg.RSS.Feeds) > 0 {
 		out = append(out, rss.NewCollector(a.Cfg.RSS, a.Log.With("sub", "rss")))
 	}
-	if a.Cfg.Reddit.Enabled && len(a.Cfg.Reddit.Subreddits) > 0 {
+	if a.Cfg.Reddit.Enabled && len(a.Cfg.Reddit.Subreddits) > 0 && a.Cfg.Reddit.Every == 0 {
 		c, err := reddit.NewCollector(ctx, a.Cfg.Reddit, a.Log.With("sub", "reddit"))
 		if err == nil {
 			out = append(out, c)
@@ -179,6 +179,31 @@ func (a *App) CollectOnce(ctx context.Context) (int, error) {
 	return total, nil
 }
 
+// collectReddit runs only the Reddit collector on its own (slower) interval
+// to stay under Reddit's anonymous-RSS rate limit. It is used when
+// reddit.every is configured; the global CollectOnce then skips Reddit.
+func (a *App) collectReddit(ctx context.Context) error {
+	var c ingestion.Collector
+	var err error
+	if c, err = reddit.NewCollector(ctx, a.Cfg.Reddit, a.Log.With("sub", "reddit")); err != nil {
+		a.Log.Warn("reddit oauth unavailable, using public adapter", "error", err.Error())
+		c = reddit.NewPublicCollector(a.Cfg.Reddit, a.Log.With("sub", "reddit-public"))
+	}
+	start := time.Now()
+	items, err := c.Collect(ctx)
+	if err != nil {
+		a.Log.Warn("reddit collector failed", "error", err, "duration_ms", time.Since(start).Milliseconds())
+		return err
+	}
+	inserted, err := a.Ingest.IngestBatch(ctx, c.Name(), items)
+	if err != nil {
+		a.Log.Warn("reddit ingest failed", "error", err)
+		return err
+	}
+	a.Log.Info("collect ok", "collector", c.Name(), "items", len(items), "new", inserted, "duration_ms", time.Since(start).Milliseconds())
+	return nil
+}
+
 // RankPending scores items that do not have a score yet.
 func (a *App) RankPending(ctx context.Context) (int, error) {
 	return a.Ranker.RankPending(ctx)
@@ -195,7 +220,8 @@ func (a *App) Run(ctx context.Context) error {
 	if err := a.Migrate(ctx); err != nil {
 		a.Log.Warn("auto-migrate failed", "error", err.Error())
 	}
-	// Collection every 20 minutes.
+	// Collection every 20 minutes (RSS, GitHub, X, and Reddit only when
+	// Reddit has no dedicated interval configured).
 	a.Scheduler.Add("collect", scheduler.Spec{
 		Every: 20 * time.Minute,
 		Run: func(ctx context.Context) {
@@ -204,6 +230,19 @@ func (a *App) Run(ctx context.Context) error {
 			}
 		},
 	})
+	// Reddit may run on its own slower interval to stay under Reddit's
+	// anonymous-RSS rate limit. When reddit.every is set, CollectOnce
+	// skips Reddit (it has its own job below) so we never double-collect.
+	if a.Cfg.Reddit.Enabled && a.Cfg.Reddit.Every > 0 {
+		a.Scheduler.Add("reddit-collect", scheduler.Spec{
+			Every: a.Cfg.Reddit.Every,
+			Run: func(ctx context.Context) {
+				if err := a.collectReddit(ctx); err != nil {
+					a.Log.Warn("reddit collect", "error", err)
+				}
+			},
+		})
+	}
 	// Briefing once per day at the configured local time.
 	a.Scheduler.Add("briefing", scheduler.Spec{
 		DailyAt: a.Cfg.Briefing.Schedule,
