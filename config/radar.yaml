@@ -59,6 +59,7 @@ rss:
 reddit:
   enabled: true
   every: 60m   # own poll interval (throttled 2.5s/sub) to avoid 429 from Reddit edge
+  listing: new  # fetch newest posts (not "hot") — fresher signal for the radar
   subreddits:
     - opencodeCLI
     - aiagents
@@ -75,7 +76,6 @@ reddit:
     - Python
     - rust
     - ZaiGLM
-  listing: hot
   limit: 25
 
 github:

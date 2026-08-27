@@ -74,7 +74,13 @@ func (c *PublicCollector) fetchSub(ctx context.Context, sub string) ([]model.Ite
 	if name == "" {
 		return nil, fmt.Errorf("cannot parse subreddit from %q", sub)
 	}
-	u := fmt.Sprintf("https://www.reddit.com/r/%s/.rss?limit=%d", name, c.cfg.Limit)
+	// Public RSS honours the listing as a path segment: /r/<sub>/.rss (hot),
+	// /r/<sub>/new/.rss, /r/<sub>/rising/.rss, /r/<sub>/top/.rss.
+	listing := c.cfg.Listing
+	if listing == "" {
+		listing = "hot"
+	}
+	u := fmt.Sprintf("https://www.reddit.com/r/%s/%s/.rss?limit=%d", name, listing, c.cfg.Limit)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
