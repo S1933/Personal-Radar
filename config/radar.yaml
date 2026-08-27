@@ -28,21 +28,36 @@ topics:
 rss:
   enabled: true
   feeds:
-    - name: OpenAI Blog
-      url: https://openai.com/news/rss.xml
-      topics: [ai]
-    - name: Anthropic News
-      url: https://www.anthropic.com/rss.xml
-      topics: [ai, coding-agents]
-    - name: Go Blog
-      url: https://go.dev/blog/feed.atom
-      topics: [go, software-engineering]
+    - name: AWS Application Management
+      url: http://blogs.aws.amazon.com/application-management/blog/feed/recentPosts.rss
+      topics: [devops, software-engineering]
+    - name: Yoan Dev
+      url: https://flux.yoandev.co/rss.xml
+      topics: [software-engineering, php]
     - name: Hacker News Front Page
       url: https://hnrss.org/frontpage
-      topics: [software-engineering, open-source]
-    - name: Reddit r/LocalLLaMA RSS
-      url: https://www.reddit.com/r/LocalLLaMA/.rss
+      topics: [software-engineering, open-source, ai]
+    - name: HumanCoders
+      url: http://news.humancoders.com/items/feed.rss
+      topics: [software-engineering, php]
+    - name: Le Monde IA
+      url: http://www.lemonde.fr/intelligence-artificielle/rss_full.xml
       topics: [ai]
+    - name: Infos MyTux
+      url: https://infos.mytux.fr/rss
+      topics: [devops, software-engineering]   # best-effort: unreachable from Pi (timeout)
+    - name: Korben
+      url: http://feeds.feedburner.com/KorbensBlog-UpgradeYourMind
+      topics: [software-engineering, devops, ai]
+    - name: Le Monde Sciences
+      url: http://www.lemonde.fr/rss/tag/sciences.xml
+      topics: [science]
+    - name: Cloudflare Blog
+      url: https://blog.cloudflare.com/rss/
+      topics: [devops, software-engineering, ai]
+    - name: Le Figaro Sciences
+      url: http://www.lefigaro.fr/rss/figaro_sciences.xml
+      topics: [science, ai]
 
 reddit:
   enabled: true
