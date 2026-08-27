@@ -243,16 +243,27 @@ func (a *App) Run(ctx context.Context) error {
 			},
 		})
 	}
-	// Briefing once per day at the configured local time.
-	a.Scheduler.Add("briefing", scheduler.Spec{
-		DailyAt: a.Cfg.Briefing.Schedule,
-		Loc:     a.Cfg.Location(),
-		Run: func(ctx context.Context) {
-			if _, err := a.Briefer.Generate(ctx, briefing.SendOption(true)); err != nil {
-				a.Log.Error("briefing", "error", err)
-			}
-		},
-	})
+	// Briefing: one job per daily slot (default single 07:00, or the
+	// configured schedules list). Each slot generates + sends the briefing.
+	slots := a.Cfg.Briefing.Schedules
+	if a.Cfg.Briefing.Schedule != "" {
+		slots = append(slots, a.Cfg.Briefing.Schedule)
+	}
+	if len(slots) == 0 {
+		slots = []string{"07:00"}
+	}
+	for i, slot := range slots {
+		s := slot // capture loop var
+		a.Scheduler.Add(fmt.Sprintf("briefing-%02d", i), scheduler.Spec{
+			DailyAt: s,
+			Loc:     a.Cfg.Location(),
+			Run: func(ctx context.Context) {
+				if _, err := a.Briefer.Generate(ctx, briefing.SendOption(true)); err != nil {
+					a.Log.Error("briefing", "slot", s, "error", err)
+				}
+			},
+		})
+	}
 	a.Scheduler.Start(ctx)
 
 	if a.Telegram != nil {

@@ -75,11 +75,12 @@ func (d DatabaseConfig) DSN() string {
 }
 
 type BriefingConfig struct {
-	Schedule  string `yaml:"schedule"` // "07:00"
-	Timezone  string `yaml:"timezone"` // overrides top-level timezone
-	MaxItems  int    `yaml:"max_items"`
-	MaxTrends int    `yaml:"max_trends"`
-	Send      bool   `yaml:"send"` // deliver via Telegram when true
+	Schedule  string   `yaml:"schedule"`  // single "07:00" (legacy)
+	Schedules []string `yaml:"schedules"` // multiple daily slots, e.g. ["08:00","14:00","20:00"]
+	Timezone  string   `yaml:"timezone"`   // overrides top-level timezone
+	MaxItems  int      `yaml:"max_items"`
+	MaxTrends int      `yaml:"max_trends"`
+	Send      bool     `yaml:"send"` // deliver via Telegram when true
 }
 
 type RSSConfig struct {
