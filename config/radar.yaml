@@ -64,6 +64,16 @@ reddit:
     - LocalLLaMA
     - golang
     - devops
+    - actutech
+    - ClaudeAI
+    - ClaudeCode
+    - CLI
+    - codex
+    - developpeurs
+    - Playwright
+    - Python
+    - rust
+    - ZaiGLM
   listing: hot
   limit: 25
 
