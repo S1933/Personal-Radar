@@ -87,7 +87,7 @@ x:
     - "AI agent framework"
 
 linkedin:
-  enabled: true
+  enabled: false  # LinkedIn is login-wall + anti-scrape; static/voyager/headless all blocked. X (mirror) + RSS cover the same orgs.
   pages:
     - name: OpenAI
       url: https://www.linkedin.com/company/openai/
