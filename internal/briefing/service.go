@@ -187,10 +187,23 @@ func (s *Service) render(ctx context.Context, items []store.ScoredItem, trends [
 		return b.String()
 	}
 
+	// De-duplicate by normalized title so the same story (e.g. a tweet
+	// surfaced twice by X) does not appear twice in the briefing.
+	seen := make(map[string]bool)
+	var deduped []store.ScoredItem
+	for _, it := range items {
+		key := normTitle(it.Title)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		deduped = append(deduped, it)
+	}
+
 	fmt.Fprintf(&b, "🔥 *À NE PAS MANQUER*\n\n")
-	for i, it := range items {
-		score := fmt.Sprintf("%.2f", it.Score.Final)
-		fmt.Fprintf(&b, "%d. [%s](%s)\n   _%s · ⭐ %s_\n", i+1, escape(it.Title), it.URL, it.Source, score)
+	for i, it := range deduped {
+		icon := sourceIcon(it.Source)
+		fmt.Fprintf(&b, "%d. %s [*%s*](%s)\n", i+1, icon, escape(it.Title), it.URL)
 		// Optional LLM "why it matters" line (best-effort).
 		if s.synth != nil {
 			if why, err := s.synth.Rationale(ctx, it.Title, it.Content, it.Source); err == nil && why != "" {
@@ -207,6 +220,35 @@ func (s *Service) render(ctx context.Context, items []store.ScoredItem, trends [
 	}
 
 	b.WriteString("\n💡 _Réponds 👍/👎/🔥/📌 ou /save N pour affiner le radar._")
+	return b.String()
+}
+
+// sourceIcon maps a collector source name to a recognizable emoji.
+func sourceIcon(src string) string {
+	switch src {
+	case "github":
+		return "🐙"
+	case "x":
+		return "🐦"
+	case "reddit", "reddit-public":
+		return "🔴"
+	case "rss":
+		return "📰"
+	default:
+		return "•"
+	}
+}
+
+// normTitle lowercases and strips punctuation/space so near-identical
+// titles collapse to the same dedup key.
+func normTitle(t string) string {
+	t = strings.ToLower(t)
+	var b strings.Builder
+	for _, r := range t {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		}
+	}
 	return b.String()
 }
 
