@@ -41,8 +41,20 @@
     .header-top h1 {
       font-size: 15px; font-weight: 600; margin: 0; flex: 1;
       letter-spacing: 0.01em;
+      display: flex; align-items: center; gap: 8px;
+      min-width: 0;
     }
     .header-top h1 span { color: var(--muted); font-weight: 400; }
+    /* discreet mark-all-read action, inline with the counter */
+    #readall {
+      background: none; border: 0; padding: 0;
+      color: #6b7480; font-size: 12px; font-weight: 400;
+      cursor: pointer; white-space: nowrap; flex-shrink: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #readall:hover { color: var(--accent); }
+    #readall::before { content: "✓ "; }
+    #readall:hover::before { content: "✓ "; }
     #refresh {
       background: transparent; color: var(--muted);
       border: 1px solid var(--border); border-radius: 8px;
@@ -210,9 +222,8 @@
 <body>
   <header>
     <div class="header-top">
-      <h1>Signets <span id="count"></span></h1>
+      <h1>Signets <span id="count"></span><button id="readall" title="Marquer tout comme lu" onclick="markAllRead()">tout lu</button></h1>
       <button id="refresh" title="Rafraîchir" onclick="load()">↻ <span class="refresh-label">Rafraîchir</span></button>
-      <button id="readall" title="Marquer tout comme lu" onclick="markAllRead()">✓ <span class="refresh-label">Tout marquer lu</span></button>
     </div>
     <div class="filters">
       <button data-filter="unread" class="active">Non lus</button>
@@ -375,6 +386,11 @@
       try {
         const data = await fetchJSON(`/api/bookmarks?filter=${currentFilter}&limit=100`);
         count.textContent = data.total ? `· ${data.total}` : "";
+        // "tout lu" only makes sense when there is something left to read
+        const unreadLeft = currentFilter === "unread"
+          ? data.total > 0
+          : currentFilter === "all" && data.items.some(b => !b.is_read);
+        document.getElementById("readall").style.display = unreadLeft ? "" : "none";
         renderTagBar(data.items);
         if (!data.items.length) {
           list.innerHTML = `<div class="empty">Rien à afficher<small>Le prochain briefing alimentera cette liste.</small></div>`;
