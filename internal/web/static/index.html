@@ -211,7 +211,8 @@
   <header>
     <div class="header-top">
       <h1>Signets <span id="count"></span></h1>
-      <button id="refresh" title="Rafraîchir">↻ <span class="refresh-label">Rafraîchir</span></button>
+      <button id="refresh" title="Rafraîchir" onclick="load()">↻ <span class="refresh-label">Rafraîchir</span></button>
+      <button id="readall" title="Marquer tout comme lu" onclick="markAllRead()">✓ <span class="refresh-label">Tout marquer lu</span></button>
     </div>
     <div class="filters">
       <button data-filter="unread" class="active">Non lus</button>
@@ -397,6 +398,22 @@
       t.classList.add("show");
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => t.classList.remove("show"), 1800);
+    }
+
+    // Mark every bookmarked item as read.
+    async function markAllRead() {
+      if (!confirm("Marquer tous les contenus comme lus ?")) return;
+      const btn = document.getElementById("readall");
+      btn.disabled = true;
+      try {
+        const data = await fetchJSON("/api/bookmarks/read-all", { method: "POST" });
+        toast(`✓ ${data.marked} contenu${data.marked > 1 ? "s" : ""} marqué${data.marked > 1 ? "s" : ""} lu`);
+      } catch (err) {
+        toast("Erreur : " + err.message);
+      } finally {
+        btn.disabled = false;
+        load();
+      }
     }
 
     document.addEventListener("click", async (e) => {

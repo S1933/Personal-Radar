@@ -60,6 +60,7 @@ func New(cfg Config, st *store.Store, log *logging.Logger) *Server {
 	s := &Server{cfg: cfg, store: st, log: log}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/bookmarks", s.handleList)
+	mux.HandleFunc("/api/bookmarks/read-all", s.handleReadAll) // must be registered before the {id} pattern? longest-pattern wins in ServeMux, safe either way
 	mux.HandleFunc("/api/bookmarks/", s.handleItem) // /api/bookmarks/{id} and /{id}/read etc.
 	mux.HandleFunc("/api/summary/", s.handleSummary) // /api/summary/{id}
 	mux.Handle("/", s.handleStatic())
@@ -83,6 +84,22 @@ func (s *Server) Start() error {
 // Stop performs a graceful shutdown with a short drain window.
 func (s *Server) Stop(ctx context.Context) error {
 	return s.srv.Shutdown(ctx)
+}
+
+// handleReadAll marks every bookmarked item as read.
+// POST /api/bookmarks/read-all
+func (s *Server) handleReadAll(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	n, err := s.store.MarkAllRead(r.Context())
+	if err != nil {
+		s.log.Error("mark all read", "error", err)
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"marked": n})
 }
 
 // handleList serves GET /api/bookmarks?filter=unread|read|all&limit=&offset=

@@ -362,6 +362,17 @@ func (s *Store) MarkUnread(ctx context.Context, id int64) error {
 	return s.setReadFlag(ctx, id, false)
 }
 
+// MarkAllRead marks every bookmarked item as read. Returns the number of
+// items actually updated (only those that were previously unread count).
+func (s *Store) MarkAllRead(ctx context.Context) (int64, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE items SET is_read = TRUE WHERE is_bookmarked = TRUE AND is_read = FALSE`)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 func (s *Store) setReadFlag(ctx context.Context, id int64, v bool) error {
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE items SET is_read = $1 WHERE id = $2`, v, id)
