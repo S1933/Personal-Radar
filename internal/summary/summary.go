@@ -143,17 +143,17 @@ func (s *Service) put(id int64, summary string) {
 // synthesizer: French, concise, no fluff.
 func (s *Service) call(ctx context.Context, title, content, source string) (string, error) {
 	prompt := fmt.Sprintf(
-		"Source: %s\nTitre: %s\nExtrait: %s\n\nEn français, rédige une description complète (3 à 5 phrases, max 500 caractères) de cet article pour un développeur senior qui parcourt sa veille tech. Couvre l'essentiel : sujet, point clé, enjeu. Factuel, pas de superlatifs, pas de marketing, pas d'émoticônes.",
-		source, title, truncate(content, 900))
+		"Source: %s\nTitre: %s\nExtrait: %s\n\nÉcris UNE SEULE phrase factuelle (max 140 caractères) résumant cet article pour un lecteur qui veut scanner vite. Style télégraphique : sujet + point clé, sans introduction (interdit : « Cet article... », « Ce fil... »), sans conclusion (« L'enjeu est... »), sans marketing, sans emoji. Le résultat doit être directement lisible dans une card de dashboard.",
+		source, title, truncate(content, 700))
 
 	body, err := json.Marshal(map[string]any{
 		"model": s.model,
 		"messages": []map[string]string{
-			{"role": "system", "content": "Tu es un éditeur de veille tech. Réponds toujours en français, factuellement, sans marketing, sans fluff, sans emoji."},
+			{"role": "system", "content": "Tu rédiges des résumés en français, une phrase, style télégraphique, factuel, direct, sans fluff."},
 			{"role": "user", "content": prompt},
 		},
-		"temperature": 0.3,
-		"max_tokens":  220,
+		"temperature": 0.2,
+		"max_tokens":  60,
 	})
 	if err != nil {
 		return "", err
@@ -207,8 +207,8 @@ func clean(s string) string {
 	for strings.Contains(s, "  ") {
 		s = strings.ReplaceAll(s, "  ", " ")
 	}
-	if len(s) > 520 {
-		s = s[:517] + "..."
+	if len(s) > 160 {
+		s = s[:157] + "..."
 	}
 	return strings.TrimSpace(s)
 }
