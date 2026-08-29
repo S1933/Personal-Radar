@@ -72,16 +72,17 @@
     .summary { color: var(--muted); font-size: 12.5px; margin: 2px 2px 12px; }
 
     .card {
-      display: flex; gap: 12px;
+      display: flex; flex-direction: column; gap: 7px;
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 13px 13px 11px;
+      padding: 13px 14px 11px;
       margin-bottom: 9px;
     }
     .card.read { opacity: 0.5; }
     .card.read .title { text-decoration: line-through; }
 
+    .card-head { display: flex; gap: 10px; align-items: flex-start; }
     .source-icon {
       width: 34px; height: 34px; flex-shrink: 0;
       display: grid; place-items: center;
@@ -95,28 +96,32 @@
       overflow: hidden;
     }
     .excerpt {
-      margin-top: 5px; color: var(--muted); font-size: 13px; line-height: 1.5;
+      color: var(--muted); font-size: 13px; line-height: 1.5;
     }
     .excerpt.loading { color: #6b7480; font-style: italic; }
     .excerpt.placeholder { color: #6b7480; font-style: italic; }
     .meta {
-      margin-top: 7px; color: var(--muted); font-size: 12px;
+      color: var(--muted); font-size: 12px;
       display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
     }
     .meta .dot { color: #3a4350; }
 
-    /* actions */
-    .actions { display: flex; gap: 6px; flex-shrink: 0; }
+    /* actions: row at the bottom of the card, right-aligned */
+    .actions {
+      display: flex; gap: 6px; justify-content: flex-end;
+      margin-top: 2px; padding-top: 8px;
+      border-top: 1px solid var(--border);
+    }
     .actions button {
       background: transparent; color: var(--muted);
       border: 1px solid var(--border); border-radius: 8px;
-      padding: 8px 11px; font-size: 12px; cursor: pointer;
+      padding: 8px 14px; font-size: 12px; cursor: pointer;
       min-height: 34px; -webkit-tap-highlight-color: transparent;
-      display: flex; align-items: center; gap: 4px;
+      display: flex; align-items: center; gap: 5px;
     }
     .actions button:active { background: var(--panel-2); }
     .actions button.done { color: var(--accent); border-color: rgba(79,143,247,0.35); }
-    .actions .delete { color: #8a4a4d; border-color: transparent; }
+    .actions .delete { color: #8a4a4d; }
     .actions .delete:active { color: var(--danger); }
 
     .empty { text-align: center; color: var(--muted); padding: 70px 20px; font-size: 14px; }
@@ -199,21 +204,23 @@
       const card = document.createElement("div");
       card.className = "card" + (b.is_read ? " read" : "");
       card.innerHTML = `
-        <div class="source-icon">${icon}</div>
-        <div class="body">
-          <a class="title" href="${escape(url)}" target="_blank" rel="noopener">${escape(b.title || "(sans titre)")}</a>
-          <div class="excerpt loading" id="excerpt-${b.id}">Résumé…</div>
-          <div class="meta">
-            <span>${escape(srcLabel)}</span>
-            <span class="dot">·</span>
-            <span>${fmtTime(b.collected_at)}</span>
+        <div class="card-head">
+          <div class="source-icon">${icon}</div>
+          <div class="body">
+            <a class="title" href="${escape(url)}" target="_blank" rel="noopener">${escape(b.title || "(sans titre)")}</a>
           </div>
+        </div>
+        <div class="excerpt loading" id="excerpt-${b.id}">Résumé…</div>
+        <div class="meta">
+          <span>${escape(srcLabel)}</span>
+          <span class="dot">·</span>
+          <span>${fmtTime(b.collected_at)}</span>
         </div>
         <div class="actions">
           ${b.is_read
-            ? `<button class="done" data-action="unread" data-id="${b.id}" title="Marquer non lu">↩</button>`
-            : `<button class="done" data-action="read" data-id="${b.id}" title="Marquer lu">✓</button>`}
-          <button class="delete" data-action="delete" data-id="${b.id}" title="Supprimer">✕</button>
+            ? `<button class="done" data-action="unread" data-id="${b.id}">↩ Non lu</button>`
+            : `<button class="done" data-action="read" data-id="${b.id}">✓ Lu</button>`}
+          <button class="delete" data-action="delete" data-id="${b.id}">✕ Supprimer</button>
         </div>
       `;
       return card;
