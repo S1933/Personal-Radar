@@ -180,10 +180,18 @@ func (s *Server) handleItem(w http.ResponseWriter, r *http.Request) {
 
 // dispatchLike toggles the liked flag and feeds the personalization
 // preferences so future rankings boost similar content.
+// Liking also marks the item as read — a liked item has been seen.
 func (s *Server) dispatchLike(w http.ResponseWriter, r *http.Request, id int64, liked bool) {
 	var err error
 	if liked {
 		err = s.store.MarkLiked(r.Context(), id)
+		if err == nil {
+			// Read flag change is best-effort: the item exists (MarkLiked
+			// just succeeded), so this can only fail on a DB hiccup.
+			if rerr := s.store.MarkRead(r.Context(), id); rerr != nil {
+				s.log.Warn("like: mark read", "id", id, "error", rerr)
+			}
+		}
 	} else {
 		err = s.store.MarkUnliked(r.Context(), id)
 	}
