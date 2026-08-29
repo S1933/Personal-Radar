@@ -242,6 +242,7 @@
     const FILTER_LABEL = { unread: "non lus", liked: "likés", all: "tous" };
     // French labels for the category chips
     const TAG_LABEL = {
+      "coding-agents": "agents de code",
       "software-engineering": "génie logiciel",
       "open-source": "open source",
       "ai": "IA",
@@ -298,9 +299,9 @@
       const card = document.createElement("div");
       card.className = "card" + (b.is_liked ? " liked" : "");
       card.dataset.tags = topics.join("|");
-      // max 2 visible chips + "+N" overflow indicator
-      const chips = topics.slice(0, 2);
-      const rest = topics.length - 2;
+      // show up to 3 chips (the ingestion pipeline now guarantees 3 tags)
+      const chips = topics.slice(0, 3);
+      const rest = topics.length - 3;
       card.innerHTML = `
         <a class="excerpt loading" id="excerpt-${b.id}" href="${escape(url)}" target="_blank" rel="noopener">Résumé…</a>
         ${chips.length ? `<div class="tags">${chips.map(t => `<button class="tag" data-tag="${escape(t)}">${escape(TAG_LABEL[t] || t)}</button>`).join("")}${rest > 0 ? `<span class="tag">+${rest}</span>` : ""}</div>` : ""}

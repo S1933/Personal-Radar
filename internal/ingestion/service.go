@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/S1933/personal-radar/internal/model"
+	"github.com/S1933/personal-radar/internal/topics"
 )
 
 // Collector is the contract every source connector must implement.
@@ -44,6 +45,8 @@ func (s *Service) IngestBatch(ctx context.Context, collector string, items []mod
 		if it.Source == "" {
 			it.Source = collector
 		}
+		// Pad topics up to 3 so every dashboard card shows 3 tags.
+		it.Topics = topics.Enrich(it)
 		id, isNew, err := s.store.InsertItem(ctx, it)
 		if err != nil {
 			s.log.Warn("insert item", "collector", collector, "source_id", it.SourceID, "error", err)
