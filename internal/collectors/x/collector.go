@@ -35,8 +35,8 @@ type Logger interface {
 // NewCollector wires the twscrape sidecar. scriptPath is the absolute path to
 // xscraper/collect.py; if empty it is resolved relative to the repo root.
 func NewCollector(cfg config.XConfig, log Logger, opts ...Option) (*Collector, error) {
-	if len(cfg.Accounts) == 0 && len(cfg.Queries) == 0 {
-		return nil, fmt.Errorf("x: no accounts or queries configured")
+	if len(cfg.Accounts) == 0 && len(cfg.Queries) == 0 && len(cfg.Lists) == 0 {
+		return nil, fmt.Errorf("x: no accounts, queries or lists configured")
 	}
 	c := &Collector{
 		cfg:        cfg,
@@ -70,6 +70,9 @@ func (c *Collector) Collect(ctx context.Context) ([]model.Item, error) {
 	}
 	for _, q := range c.cfg.Queries {
 		args = append(args, "--queries", q)
+	}
+	for _, l := range c.cfg.Lists {
+		args = append(args, "--lists", l)
 	}
 
 	cmd := exec.CommandContext(ctx, c.venvPython, args...)

@@ -98,6 +98,8 @@ x:
   queries:
     - "coding agent"
     - "AI agent framework"
+  lists:
+    - "2093633176459436076"  # user X list "Radar IA" — followed live (add/remove = auto)
 
 linkedin:
   enabled: false  # LinkedIn is login-wall + anti-scrape; static/voyager/headless all blocked. X (mirror) + RSS cover the same orgs.

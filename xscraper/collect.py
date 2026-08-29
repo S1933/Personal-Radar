@@ -22,7 +22,7 @@ import sys
 from twscrape import API, gather
 
 
-async def collect(accounts, queries, limit):
+async def collect(accounts, queries, lists, limit):
     db = os.environ.get("TWSCRAPE_DB", "x_accounts.db")
     api = API(db)
 
@@ -32,7 +32,8 @@ async def collect(accounts, queries, limit):
     if auth and ct0:
         try:
             await api.pool.add_account_cookies("radar_session",
-                                               f"auth_token={auth}; ct0={ct0}")
+                                               json.dumps({"auth_token": auth,
+                                                           "ct0": ct0}))
         except Exception as e:  # noqa: BLE001
             print(json.dumps({"warn": "add_cookie", "detail": str(e)}),
                   file=sys.stderr)
@@ -77,6 +78,16 @@ async def collect(accounts, queries, limit):
         async for t in tweets:
             out.append(_item(t, t.user.username if t.user else "unknown"))
 
+    for lid in lists:
+        try:
+            tweets = api.list_timeline(lid, limit=limit)
+        except Exception as e:  # noqa: BLE001
+            print(json.dumps({"error": "list_timeline", "list": lid,
+                              "detail": str(e)}), file=sys.stderr)
+            continue
+        async for t in tweets:
+            out.append(_item(t, t.user.username if t.user else "unknown"))
+
     # dedupe by tweet id
     uniq = []
     for it in out:
@@ -110,10 +121,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--accounts", nargs="*", default=[])
     ap.add_argument("--queries", nargs="*", default=[])
+    ap.add_argument("--lists", nargs="*", default=[])
     ap.add_argument("--limit", type=int, default=10)
     args = ap.parse_args()
 
-    items = asyncio.run(collect(args.accounts, args.queries, args.limit))
+    items = asyncio.run(collect(args.accounts, args.queries, args.lists, args.limit))
     print(json.dumps(items, ensure_ascii=False, indent=2))
 
 

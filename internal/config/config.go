@@ -113,6 +113,7 @@ type XConfig struct {
 	Enabled     bool     `yaml:"enabled"`
 	Accounts    []string `yaml:"accounts"`
 	Queries     []string `yaml:"queries"`
+	Lists       []string `yaml:"lists"` // X list IDs (x.com/i/lists/<id>) — followed live
 	APIKey      string   `yaml:"-"` // from env X_API_KEY
 	APISecret   string   `yaml:"-"` // from env X_API_SECRET
 	BearerToken string   `yaml:"-"` // from env X_BEARER_TOKEN
