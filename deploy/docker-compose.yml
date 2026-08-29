@@ -40,6 +40,12 @@ services:
     volumes:
       - ../config:/app/config:ro
       - /home/pi/obsidian/Hermes:/data/obsidian
+    # Expose the bookmark dashboard on host 127.0.0.1:8081 — cloudflared
+    # routes radar.gastronomie-domicile.fr to http://localhost:8081. Not
+    # published on 0.0.0.0 so the dashboard stays on the host's loopback
+    # only; tunnel/cloudflared is the public entry point.
+    ports:
+      - "127.0.0.1:8081:8081"
     command: ["run", "-config", "config/radar.yaml"]
     restart: unless-stopped
 
