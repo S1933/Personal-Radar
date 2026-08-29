@@ -127,6 +127,18 @@ CREATE INDEX IF NOT EXISTS items_bookmarked_all_idx
 ALTER TABLE items
     ADD COLUMN IF NOT EXISTS summary_fr TEXT NOT NULL DEFAULT '';
 `,
+    // 004 — user "like" flag: the dashboard Like button replaces the read
+    // flag as the primary engagement signal. Likes also feed the
+    // personalization preferences (thumbs_up), so the ranking pipeline can
+    // boost future items that share topics/sources/authors with liked ones.
+    `
+ALTER TABLE items
+    ADD COLUMN IF NOT EXISTS is_liked BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE INDEX IF NOT EXISTS items_liked_idx
+    ON items (collected_at DESC)
+    WHERE is_liked = TRUE;
+`,
 }
 
 // Migrate applies pending migrations inside a transaction per migration.

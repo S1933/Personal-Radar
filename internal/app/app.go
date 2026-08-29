@@ -234,7 +234,22 @@ func (a *App) StartWeb(ctx context.Context) error {
 	// dashboard falls back to content excerpts — the web server remains
 	// fully functional without it.
 	summ := summary.New(a.Cfg.Models)
-	srv := web.New(web.Config{Addr: WebAddr(), Summarizer: summ}, a.Store, a.Log.With("sub", "web"))
+	srv := web.New(web.Config{
+		Addr:       WebAddr(),
+		Summarizer: summ,
+		// Dashboard likes feed the same personalization preferences as the
+		// Telegram 👍/🔥 reactions, so the ranking pipeline boosts future
+		// items sharing topics/sources/authors with liked ones.
+		OnLike: func(ctx context.Context, itemID int64, liked bool) {
+			action := "thumbs_down"
+			if liked {
+				action = "thumbs_up"
+			}
+			if err := personalization.Apply(ctx, a.Prefs, itemID, action); err != nil {
+				a.Log.Warn("apply like preference", "id", itemID, "error", err)
+			}
+		},
+	}, a.Store, a.Log.With("sub", "web"))
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.Start() }()
 	select {

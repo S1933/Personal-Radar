@@ -321,7 +321,7 @@ func (s *Store) AllPreferences(ctx context.Context) (map[string]map[string]float
 }
 
 // Bookmark is the dashboard projection: an item joined with its score, plus
-// the user-facing bookmark/read flags.
+// the user-facing bookmark/read/liked flags.
 type Bookmark struct {
 	DBID         int64     `json:"id"`
 	Source       string    `json:"source"`
@@ -335,6 +335,7 @@ type Bookmark struct {
 	Topics       []string  `json:"topics"`
 	FinalScore   float64   `json:"final_score"`
 	IsRead       bool      `json:"is_read"`
+	IsLiked      bool      `json:"is_liked"`
 }
 
 // MarkBookmarked flags the given item ids as bookmarked. Idempotent. Used by
@@ -377,6 +378,33 @@ func (s *Store) setReadFlag(ctx context.Context, id int64, v bool) error {
 	return nil
 }
 
+// MarkLiked flags an item as liked (the dashboard Like button). Likes are
+// the primary personalization signal — see personalization.Apply.
+func (s *Store) MarkLiked(ctx context.Context, id int64) error {
+	return s.setLikedFlag(ctx, id, true)
+}
+
+// MarkUnliked clears the liked flag.
+func (s *Store) MarkUnliked(ctx context.Context, id int64) error {
+	return s.setLikedFlag(ctx, id, false)
+}
+
+func (s *Store) setLikedFlag(ctx context.Context, id int64, v bool) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE items SET is_liked = $1 WHERE id = $2`, v, id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // HardDelete removes an item by id. CASCADE wipes scores / feedback /
 // item_sources. Returns ErrNotFound when the id does not exist.
 func (s *Store) HardDelete(ctx context.Context, id int64) error {
@@ -400,6 +428,7 @@ type BookmarkFilter string
 const (
 	BookmarkUnread BookmarkFilter = "unread"
 	BookmarkRead   BookmarkFilter = "read"
+	BookmarkLiked  BookmarkFilter = "liked"
 	BookmarkAll    BookmarkFilter = "all"
 )
 
@@ -422,6 +451,8 @@ func (s *Store) ListBookmarks(ctx context.Context, filter BookmarkFilter, limit,
 		whereClause = "WHERE i.is_bookmarked = TRUE AND i.is_read = FALSE"
 	case BookmarkRead:
 		whereClause = "WHERE i.is_bookmarked = TRUE AND i.is_read = TRUE"
+	case BookmarkLiked:
+		whereClause = "WHERE i.is_bookmarked = TRUE AND i.is_liked = TRUE"
 	default: // BookmarkAll
 		whereClause = "WHERE i.is_bookmarked = TRUE"
 	}
@@ -436,7 +467,7 @@ func (s *Store) ListBookmarks(ctx context.Context, filter BookmarkFilter, limit,
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT i.id, i.source, i.title, i.url, i.canonical_url, i.author,
 		       i.published_at, i.collected_at, i.content, i.topics,
-		       COALESCE(s.final_score, 0), i.is_read
+		       COALESCE(s.final_score, 0), i.is_read, i.is_liked
 		FROM items i
 		LEFT JOIN scores s ON s.item_id = i.id
 		`+whereClause+`
@@ -453,7 +484,7 @@ func (s *Store) ListBookmarks(ctx context.Context, filter BookmarkFilter, limit,
 		var published sql.NullTime
 		if err := rows.Scan(&b.DBID, &b.Source, &b.Title, &b.URL, &b.CanonicalURL,
 			&b.Author, &published, &b.CollectedAt, &b.Content, pqArray(&b.Topics),
-			&b.FinalScore, &b.IsRead); err != nil {
+			&b.FinalScore, &b.IsRead, &b.IsLiked); err != nil {
 			return nil, 0, err
 		}
 		if published.Valid {

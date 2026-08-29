@@ -35,6 +35,10 @@ type Config struct {
 	// Summarizer generates French summaries on demand. Nil disables the
 	// LLM path (dashboard falls back to a content excerpt).
 	Summarizer *summary.Service
+	// OnLike is invoked after a dashboard like/unlike so the caller can
+	// feed the personalization preferences (thumbs_up / thumbs_down).
+	// Optional — nil disables the preference side-effect.
+	OnLike func(ctx context.Context, itemID int64, liked bool)
 }
 
 // Server is the bookmark HTTP API + dashboard.
@@ -89,10 +93,10 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 	}
 	filter := store.BookmarkFilter(r.URL.Query().Get("filter"))
 	switch filter {
-	case store.BookmarkUnread, store.BookmarkRead, store.BookmarkAll, "":
+	case store.BookmarkUnread, store.BookmarkRead, store.BookmarkLiked, store.BookmarkAll, "":
 		// ok
 	default:
-		writeError(w, http.StatusBadRequest, `filter must be "unread", "read", or "all"`)
+		writeError(w, http.StatusBadRequest, `filter must be "unread", "read", "liked", or "all"`)
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
@@ -146,11 +150,39 @@ func (s *Server) handleItem(w http.ResponseWriter, r *http.Request) {
 		s.dispatchSetRead(w, r, id, true)
 	case r.Method == http.MethodPost && action == "unread":
 		s.dispatchSetRead(w, r, id, false)
+	case r.Method == http.MethodPost && action == "like":
+		s.dispatchLike(w, r, id, true)
+	case r.Method == http.MethodPost && action == "unlike":
+		s.dispatchLike(w, r, id, false)
 	case r.Method == http.MethodGet && action == "":
 		s.dispatchGet(w, r, id)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+// dispatchLike toggles the liked flag and feeds the personalization
+// preferences so future rankings boost similar content.
+func (s *Server) dispatchLike(w http.ResponseWriter, r *http.Request, id int64, liked bool) {
+	var err error
+	if liked {
+		err = s.store.MarkLiked(r.Context(), id)
+	} else {
+		err = s.store.MarkUnliked(r.Context(), id)
+	}
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+		s.log.Error("set liked flag", "id", id, "value", liked, "error", err)
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	if s.cfg.OnLike != nil {
+		s.cfg.OnLike(r.Context(), id, liked)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"id": id, "is_liked": liked})
 }
 
 func (s *Server) dispatchDelete(w http.ResponseWriter, r *http.Request, id int64) {

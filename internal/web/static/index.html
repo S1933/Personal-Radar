@@ -81,6 +81,7 @@
     }
     .card.read { opacity: 0.5; }
     .card.read .title { text-decoration: line-through; }
+    .card.liked { border-color: rgba(229, 72, 77, 0.35); }
 
     .card-head { display: flex; gap: 10px; align-items: flex-start; }
     .source-icon {
@@ -128,7 +129,8 @@
       display: flex; align-items: center; gap: 5px;
     }
     .actions button:active { background: var(--panel-2); }
-    .actions button.done { color: var(--accent); border-color: rgba(79,143,247,0.35); }
+    .actions button.like { color: var(--accent); border-color: rgba(79,143,247,0.35); }
+    .actions button.liked { color: #e5484d; border-color: rgba(229,72,77,0.45); }
     .actions .delete { color: #8a4a4d; }
     .actions .delete:active { color: var(--danger); }
 
@@ -167,7 +169,7 @@
     </div>
     <div class="filters">
       <button data-filter="unread" class="active">Non lus</button>
-      <button data-filter="read">Lus</button>
+      <button data-filter="liked">Likés</button>
       <button data-filter="all">Tous</button>
     </div>
   </header>
@@ -178,7 +180,7 @@
   <script>
     const SOURCE_ICON = { github: "🐙", x: "🐦", reddit: "🔴", "reddit-public": "🔴", rss: "📰", linkedin: "💼" };
     const SOURCE_LABEL = { github: "GitHub", x: "X", reddit: "Reddit", "reddit-public": "Reddit", rss: "Flux RSS", linkedin: "LinkedIn" };
-    const FILTER_LABEL = { unread: "non lus", read: "lus", all: "tous" };
+    const FILTER_LABEL = { unread: "non lus", liked: "likés", all: "tous" };
     let currentFilter = "unread";
 
     async function fetchJSON(url, opts) {
@@ -210,7 +212,7 @@
       const srcLabel = SOURCE_LABEL[b.source] || b.source;
       const url = b.url || b.canonical_url || "#";
       const card = document.createElement("div");
-      card.className = "card" + (b.is_read ? " read" : "");
+      card.className = "card" + (b.is_liked ? " liked" : "");
       card.innerHTML = `
         <div class="card-head">
           <div class="source-icon">${icon}</div>
@@ -226,9 +228,9 @@
             <span>${fmtTime(b.collected_at)}</span>
           </div>
           <div class="actions">
-            ${b.is_read
-              ? `<button class="done" data-action="unread" data-id="${b.id}">↩ Non lu</button>`
-              : `<button class="done" data-action="read" data-id="${b.id}">✓ Lu</button>`}
+            ${b.is_liked
+              ? `<button class="liked" data-action="unlike" data-id="${b.id}">♥ Liké</button>`
+              : `<button class="like" data-action="like" data-id="${b.id}">♡ Like</button>`}
             <button class="delete" data-action="delete" data-id="${b.id}">✕ Supprimer</button>
           </div>
         </div>
@@ -287,15 +289,16 @@
         const id = btn.dataset.id;
         const action = btn.dataset.action;
         if (action === "delete" && !confirm("Supprimer définitivement ?")) return;
-        const prev = btn.innerHTML;
         btn.disabled = true;
         try {
           if (action === "delete") {
             await fetchJSON(`/api/bookmarks/${id}`, { method: "DELETE" });
+            toast("Supprimé");
           } else {
+            // like / unlike — the server also feeds personalization prefs
             await fetchJSON(`/api/bookmarks/${id}/${action}`, { method: "POST" });
+            toast(action === "like" ? "♥ Ajouté à vos préférences" : "Like retiré");
           }
-          toast(action === "delete" ? "Supprimé" : (action === "read" ? "Marqué lu" : "Marqué non lu"));
           load();
         } catch (err) {
           btn.disabled = false;
