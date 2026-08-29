@@ -96,21 +96,29 @@
       overflow: hidden;
     }
     .excerpt {
-      color: var(--muted); font-size: 13px; line-height: 1.5;
+      color: #aab4c0; font-size: 15px; line-height: 1.5;
     }
     .excerpt.loading { color: #6b7480; font-style: italic; }
     .excerpt.placeholder { color: #6b7480; font-style: italic; }
+
+    /* footer: meta (source · date) on the left, actions on the right */
+    .card-foot {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      margin-top: 4px; padding-top: 9px;
+      border-top: 1px solid var(--border);
+    }
     .meta {
-      color: var(--muted); font-size: 12px;
-      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+      color: var(--muted); font-size: 12.5px;
+      display: flex; align-items: center; gap: 6px;
+      min-width: 0;
     }
     .meta .dot { color: #3a4350; }
+    .meta .src { font-weight: 500; color: #b9c1cc; }
 
-    /* actions: row at the bottom of the card, right-aligned */
+    /* actions: row on the right side of the footer */
     .actions {
-      display: flex; gap: 6px; justify-content: flex-end;
-      margin-top: 2px; padding-top: 8px;
-      border-top: 1px solid var(--border);
+      display: flex; gap: 6px;
+      margin-left: auto; /* push to the right */
     }
     .actions button {
       background: transparent; color: var(--muted);
@@ -211,16 +219,18 @@
           </div>
         </div>
         <div class="excerpt loading" id="excerpt-${b.id}">Résumé…</div>
-        <div class="meta">
-          <span>${escape(srcLabel)}</span>
-          <span class="dot">·</span>
-          <span>${fmtTime(b.collected_at)}</span>
-        </div>
-        <div class="actions">
-          ${b.is_read
-            ? `<button class="done" data-action="unread" data-id="${b.id}">↩ Non lu</button>`
-            : `<button class="done" data-action="read" data-id="${b.id}">✓ Lu</button>`}
-          <button class="delete" data-action="delete" data-id="${b.id}">✕ Supprimer</button>
+        <div class="card-foot">
+          <div class="meta">
+            <span class="src">${escape(srcLabel)}</span>
+            <span class="dot">·</span>
+            <span>${fmtTime(b.collected_at)}</span>
+          </div>
+          <div class="actions">
+            ${b.is_read
+              ? `<button class="done" data-action="unread" data-id="${b.id}">↩ Non lu</button>`
+              : `<button class="done" data-action="read" data-id="${b.id}">✓ Lu</button>`}
+            <button class="delete" data-action="delete" data-id="${b.id}">✕ Supprimer</button>
+          </div>
         </div>
       `;
       return card;
