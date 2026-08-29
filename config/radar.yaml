@@ -93,6 +93,7 @@ x:
     - openai
     - anthropicai
     - huggingface
+    - optimikee
   queries:
     - "coding agent"
     - "AI agent framework"
