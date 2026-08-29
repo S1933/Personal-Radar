@@ -154,9 +154,16 @@
       header { padding: 12px 24px; flex-direction: row; align-items: center; gap: 16px; }
       header .filters { width: 300px; margin-left: auto; }
       .header-top h1 { flex: 0; }
-      main { padding: 20px 24px 60px; }
-      .card { padding: 15px 16px 13px; }
-      .title { -webkit-line-clamp: 1; }
+      main { max-width: 1280px; padding: 20px 24px 60px; }
+      /* multi-column grid: each card ≥ 340px, expands to fill the row */
+      #list {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+        gap: 12px;
+        align-items: start;
+      }
+      .card { margin-bottom: 0; }
+      .title { -webkit-line-clamp: 2; }
       .actions { align-items: center; }
     }
   </style>
