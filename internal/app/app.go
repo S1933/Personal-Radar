@@ -22,6 +22,7 @@ import (
 	"github.com/S1933/personal-radar/internal/ranking"
 	"github.com/S1933/personal-radar/internal/scheduler"
 	"github.com/S1933/personal-radar/internal/store"
+	"github.com/S1933/personal-radar/internal/summary"
 	"github.com/S1933/personal-radar/internal/telegram"
 	"github.com/S1933/personal-radar/internal/web"
 )
@@ -228,7 +229,12 @@ func WebAddr() string {
 // Use Run() if you want the scheduler + telegram + web all together;
 // StartWeb is for `radar web` (dashboard-only mode).
 func (a *App) StartWeb(ctx context.Context) error {
-	srv := web.New(web.Config{Addr: WebAddr()}, a.Store, a.Log.With("sub", "web"))
+	// The summarizer is wired from the same models config as the briefing
+	// synthesizer. When no LLM is configured it stays disabled and the
+	// dashboard falls back to content excerpts — the web server remains
+	// fully functional without it.
+	summ := summary.New(a.Cfg.Models)
+	srv := web.New(web.Config{Addr: WebAddr(), Summarizer: summ}, a.Store, a.Log.With("sub", "web"))
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.Start() }()
 	select {

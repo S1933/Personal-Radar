@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="en">
+<html lang="fr">
 <head>
   <meta charset="utf-8">
-  <title>Personal Radar — Bookmarks</title>
+  <title>Personal Radar — Signets</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     :root {
@@ -71,6 +71,12 @@
       background: var(--panel-2); border: 1px solid var(--border);
       padding: 1px 8px; border-radius: 10px; font-size: 11px; color: var(--muted);
     }
+    .excerpt {
+      margin-top: 8px; color: var(--text); font-size: 13px;
+      line-height: 1.5; border-left: 2px solid var(--accent-2);
+      padding-left: 10px;
+    }
+    .excerpt.loading { color: var(--muted); font-style: italic; }
     .actions { display: flex; gap: 6px; flex-shrink: 0; }
     .actions button {
       background: transparent; color: var(--muted);
@@ -95,22 +101,24 @@
 </head>
 <body>
   <header>
-    <h1>📡 Personal Radar — Bookmarks</h1>
+    <h1>📡 Personal Radar — Signets</h1>
     <div class="filters">
-      <button data-filter="unread" class="active">Unread</button>
-      <button data-filter="read">Read</button>
-      <button data-filter="all">All</button>
+      <button data-filter="unread" class="active">Non lus</button>
+      <button data-filter="read">Lus</button>
+      <button data-filter="all">Tous</button>
     </div>
     <div class="spacer"></div>
-    <button id="refresh" style="background: var(--panel-2); color: var(--text); border: 1px solid var(--border); padding: 6px 12px; border-radius: 6px; cursor: pointer;">↻ Refresh</button>
+    <button id="refresh" style="background: var(--panel-2); color: var(--text); border: 1px solid var(--border); padding: 6px 12px; border-radius: 6px; cursor: pointer;">↻ Rafraîchir</button>
   </header>
   <main>
-    <div id="summary" class="summary">Loading…</div>
+    <div id="summary" class="summary">Chargement…</div>
     <div id="list"></div>
   </main>
   <div id="toast" class="toast"></div>
   <script>
     const SOURCE_ICON = { github: "🐙", x: "🐦", reddit: "🔴", "reddit-public": "🔴", rss: "📰", linkedin: "💼" };
+    const SOURCE_LABEL = { github: "GitHub", x: "X", reddit: "Reddit", "reddit-public": "Reddit", rss: "Flux RSS", linkedin: "LinkedIn" };
+    const FILTER_LABEL = { unread: "non lus", read: "lus", all: "tous" };
     let currentFilter = "unread";
 
     async function fetchJSON(url, opts) {
@@ -124,11 +132,11 @@
       const d = new Date(iso);
       const now = new Date();
       const diff = (now - d) / 1000;
-      if (diff < 60) return "just now";
-      if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-      if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-      if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}d ago`;
-      return d.toLocaleDateString();
+      if (diff < 60) return "à l'instant";
+      if (diff < 3600) return `il y a ${Math.floor(diff / 60)} min`;
+      if (diff < 86400) return `il y a ${Math.floor(diff / 3600)} h`;
+      if (diff < 86400 * 7) return `il y a ${Math.floor(diff / 86400)} j`;
+      return d.toLocaleDateString("fr-FR");
     }
 
     function escape(s) {
@@ -139,44 +147,67 @@
 
     function renderItem(b) {
       const icon = SOURCE_ICON[b.source] || "•";
+      const srcLabel = SOURCE_LABEL[b.source] || b.source;
       const url = b.url || b.canonical_url || "#";
       const card = document.createElement("div");
       card.className = "card" + (b.is_read ? " read" : "");
       card.innerHTML = `
         <div class="source-icon">${icon}</div>
         <div class="body">
-          <a class="title" href="${escape(url)}" target="_blank" rel="noopener">${escape(b.title || "(untitled)")}</a>
+          <a class="title" href="${escape(url)}" target="_blank" rel="noopener">${escape(b.title || "(sans titre)")}</a>
           <div class="meta">
-            <span>${escape(b.source)}</span>
+            <span>${escape(srcLabel)}</span>
             ${b.author ? `<span>· ${escape(b.author)}</span>` : ""}
             <span>· ${fmtTime(b.collected_at)}</span>
             ${b.final_score ? `<span>· ⭐ ${b.final_score.toFixed(2)}</span>` : ""}
           </div>
           ${b.topics && b.topics.length ? `<div class="topics">${b.topics.map(t => `<span class="topic">${escape(t)}</span>`).join("")}</div>` : ""}
+          <div class="excerpt loading" id="excerpt-${b.id}">Chargement du résumé…</div>
         </div>
         <div class="actions">
           ${b.is_read
-            ? `<button data-action="unread" data-id="${b.id}">↩ Unread</button>`
-            : `<button data-action="read" data-id="${b.id}">✓ Read</button>`}
+            ? `<button data-action="unread" data-id="${b.id}">↩ Non lu</button>`
+            : `<button data-action="read" data-id="${b.id}">✓ Lu</button>`}
           <button class="delete" data-action="delete" data-id="${b.id}">✕</button>
         </div>
       `;
       return card;
     }
 
+    // Lazy-load the French summary for an item; safe against races by
+    // checking the element still exists.
+    async function loadSummary(id) {
+      const el = document.getElementById(`excerpt-${id}`);
+      try {
+        const data = await fetchJSON(`/api/summary/${id}`);
+        if (el) {
+          el.classList.remove("loading");
+          el.textContent = data.summary;
+        }
+      } catch (e) {
+        if (el) {
+          el.classList.remove("loading");
+          el.textContent = "⚠️ Résumé indisponible";
+        }
+      }
+    }
+
     async function load() {
       const list = document.getElementById("list");
-      const summary = document.getElementById("summary");
-      list.innerHTML = `<div class="empty">Loading…</div>`;
+      const summaryEl = document.getElementById("summary");
+      list.innerHTML = `<div class="empty">Chargement…</div>`;
       try {
         const data = await fetchJSON(`/api/bookmarks?filter=${currentFilter}&limit=100`);
-        summary.textContent = `${data.total} item${data.total !== 1 ? "s" : ""} (${currentFilter})`;
+        summaryEl.textContent = `${data.total} article${data.total !== 1 ? "s" : ""} (${FILTER_LABEL[currentFilter] || currentFilter})`;
         if (!data.items.length) {
-          list.innerHTML = `<div class="empty">Nothing here. The next briefing will populate this list.</div>`;
+          list.innerHTML = `<div class="empty">Rien pour l'instant. Le prochain briefing remplira cette liste.</div>`;
           return;
         }
         list.innerHTML = "";
-        for (const b of data.items) list.appendChild(renderItem(b));
+        for (const b of data.items) {
+          list.appendChild(renderItem(b));
+          loadSummary(b.id);  // fire-and-forget; result rendered when it arrives
+        }
       } catch (e) {
         list.innerHTML = `<div class="empty">⚠️ ${escape(e.message)}</div>`;
       }
@@ -194,17 +225,17 @@
       if (btn) {
         const id = btn.dataset.id;
         const action = btn.dataset.action;
-        if (action === "delete" && !confirm("Delete this item permanently?")) return;
+        if (action === "delete" && !confirm("Supprimer définitivement cet article ?")) return;
         try {
           if (action === "delete") {
             await fetchJSON(`/api/bookmarks/${id}`, { method: "DELETE" });
           } else {
             await fetchJSON(`/api/bookmarks/${id}/${action}`, { method: "POST" });
           }
-          toast(action === "delete" ? "Deleted" : (action === "read" ? "Marked read" : "Marked unread"));
+          toast(action === "delete" ? "Supprimé" : (action === "read" ? "Marqué lu" : "Marqué non lu"));
           load();
         } catch (err) {
-          toast("Error: " + err.message);
+          toast("Erreur : " + err.message);
         }
         return;
       }
@@ -219,7 +250,7 @@
     });
 
     load();
-    setInterval(load, 30000); // auto-refresh every 30s
+    // Pas d'auto-reload : l'utilisateur rafraîchit manuellement.
   </script>
 </body>
 </html>

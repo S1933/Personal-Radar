@@ -120,6 +120,13 @@ CREATE INDEX IF NOT EXISTS items_bookmarked_all_idx
     ON items (collected_at DESC)
     WHERE is_bookmarked = TRUE;
 `,
+    // 003 — French summary column for the dashboard. Kept separate from 002
+    // because 002 shipped before summary_fr; migrations are append-only so
+    // changing an already-applied migration has no effect.
+    `
+ALTER TABLE items
+    ADD COLUMN IF NOT EXISTS summary_fr TEXT NOT NULL DEFAULT '';
+`,
 }
 
 // Migrate applies pending migrations inside a transaction per migration.

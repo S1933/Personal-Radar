@@ -15,10 +15,12 @@ import (
 	"io/fs"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/S1933/personal-radar/internal/logging"
 	"github.com/S1933/personal-radar/internal/store"
+	"github.com/S1933/personal-radar/internal/summary"
 )
 
 //go:embed static
@@ -30,6 +32,9 @@ type Config struct {
 	Addr string
 	// ReadHeaderTimeout protects against slowloris. Zero = no timeout.
 	ReadHeaderTimeout time.Duration
+	// Summarizer generates French summaries on demand. Nil disables the
+	// LLM path (dashboard falls back to a content excerpt).
+	Summarizer *summary.Service
 }
 
 // Server is the bookmark HTTP API + dashboard.
@@ -52,6 +57,7 @@ func New(cfg Config, st *store.Store, log *logging.Logger) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/bookmarks", s.handleList)
 	mux.HandleFunc("/api/bookmarks/", s.handleItem) // /api/bookmarks/{id} and /{id}/read etc.
+	mux.HandleFunc("/api/summary/", s.handleSummary) // /api/summary/{id}
 	mux.Handle("/", s.handleStatic())
 	s.srv = &http.Server{
 		Addr:              cfg.Addr,
@@ -192,6 +198,113 @@ func (s *Server) dispatchGet(w http.ResponseWriter, r *http.Request, id int64) {
 		return
 	}
 	writeJSON(w, http.StatusOK, it)
+}
+
+// handleSummary serves GET /api/summary/{id} → French one-liner for the
+// item. Generates via LLM on first request (cached in memory + persisted
+// on the row), falls back to a content excerpt when the LLM is disabled
+// or unreachable.
+func (s *Server) handleSummary(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	idStr := strings.TrimPrefix(r.URL.Path, "/api/summary/")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+
+	// 1) persisted summary first (fast path, no LLM)
+	existing, err := s.store.SummaryFR(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+		s.log.Error("read summary", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+
+	if existing != "" {
+		writeJSON(w, http.StatusOK, map[string]any{"id": id, "summary": existing, "cached": true})
+		return
+	}
+
+	// 2) LLM path (when configured)
+	if s.cfg.Summarizer != nil && s.cfg.Summarizer.Enabled() {
+		// Latency is ~2-10s, so make it a streaming/async pattern in the
+		// UI; the caller polls or re-fetches.
+		it, err := s.store.ItemByID(r.Context(), id)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+		// Check again inside the mutex — another request may have just
+		// generated it.
+		existing, _ = s.store.SummaryFR(r.Context(), id)
+		if existing != "" {
+			writeJSON(w, http.StatusOK, map[string]any{"id": id, "summary": existing, "cached": true})
+			return
+		}
+		summaryText, err := s.cfg.Summarizer.Summarize(r.Context(), id, it.Title, it.Content, it.Source, "")
+		if err != nil || summaryText == "" {
+			// Fallback: excerpt from raw content.
+			excerpt := excerpt(it.Content, 200)
+			writeJSON(w, http.StatusOK, map[string]any{"id": id, "summary": excerpt, "cached": false, "fallback": true})
+			return
+		}
+		if err := s.store.SetSummaryFR(r.Context(), id, summaryText); err != nil {
+			s.log.Warn("persist summary", "id", id, "error", err)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"id": id, "summary": summaryText, "cached": false})
+		return
+	}
+
+	// 3) No LLM: excerpt
+	it, err := s.store.ItemByID(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"id": id, "summary": excerpt(it.Content, 200), "cached": false, "fallback": true})
+}
+
+// excerpt returns the first n bytes of s on a word boundary, cleaned of
+// HTML tags and collapsed whitespace, with an ellipsis.
+func excerpt(s string, n int) string {
+	// Drop common HTML tags from RSS/Reddit content.
+	s = stripTags(s)
+	s = strings.Join(strings.Fields(s), " ")
+	if len(s) <= n {
+		return s
+	}
+	cut := s[:n]
+	last := strings.LastIndex(cut, " ")
+	if last > n/2 {
+		cut = cut[:last]
+	}
+	return cut + "…"
+}
+
+// stripTags removes HTML tags (content stored from RSS feeds often
+// contains inline markup).
+func stripTags(s string) string {
+	var b strings.Builder
+	strip := false
+	for _, r := range s {
+		switch {
+		case r == '<':
+			strip = true
+		case r == '>' && strip:
+			strip = false
+		case !strip:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 // handleStatic serves the embedded dashboard. Falls back to index.html for
