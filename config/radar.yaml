@@ -94,6 +94,7 @@ x:
     - anthropicai
     - huggingface
     - optimikee
+    - thdxr
   queries:
     - "coding agent"
     - "AI agent framework"
