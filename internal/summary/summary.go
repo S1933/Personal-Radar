@@ -143,8 +143,8 @@ func (s *Service) put(id int64, summary string) {
 // synthesizer: French, concise, no fluff.
 func (s *Service) call(ctx context.Context, title, content, source string) (string, error) {
 	prompt := fmt.Sprintf(
-		"Source: %s\nTitre: %s\nExtrait: %s\n\nEn une ou deux phrases courtes (max 200 caractères), en français, résume cet article pour un développeur senior qui parcourt sa veille tech. Va à l'essentiel, pas de superlatifs, pas de marketing.",
-		source, title, truncate(content, 600))
+		"Source: %s\nTitre: %s\nExtrait: %s\n\nEn français, rédige une description complète (3 à 5 phrases, max 500 caractères) de cet article pour un développeur senior qui parcourt sa veille tech. Couvre l'essentiel : sujet, point clé, enjeu. Factuel, pas de superlatifs, pas de marketing, pas d'émoticônes.",
+		source, title, truncate(content, 900))
 
 	body, err := json.Marshal(map[string]any{
 		"model": s.model,
@@ -153,7 +153,7 @@ func (s *Service) call(ctx context.Context, title, content, source string) (stri
 			{"role": "user", "content": prompt},
 		},
 		"temperature": 0.3,
-		"max_tokens":  80,
+		"max_tokens":  220,
 	})
 	if err != nil {
 		return "", err
@@ -207,8 +207,8 @@ func clean(s string) string {
 	for strings.Contains(s, "  ") {
 		s = strings.ReplaceAll(s, "  ", " ")
 	}
-	if len(s) > 220 {
-		s = s[:217] + "..."
+	if len(s) > 520 {
+		s = s[:517] + "..."
 	}
 	return strings.TrimSpace(s)
 }
