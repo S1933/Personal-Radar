@@ -87,6 +87,14 @@ func (s *Service) Generate(ctx context.Context, opts ...context.Context) (string
 		s.log.Warn("save briefing", "error", err)
 	}
 
+	// Auto-bookmark every item that made it into the briefing. The web
+	// dashboard surfaces this list (with read/unread/delete). Dedupe-by-title
+	// in render() may drop some ids; mark only the ones that actually
+	// reached the message.
+	if err := s.store.MarkBookmarked(ctx, ids); err != nil {
+		s.log.Warn("auto-bookmark", "error", err)
+	}
+
 	// Delivery when requested via SendOption.
 	if len(opts) > 0 {
 		if send, _ := opts[0].Value(sendKey{}).(bool); send && s.telegram != nil {

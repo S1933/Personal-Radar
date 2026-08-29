@@ -1,4 +1,4 @@
-.PHONY: build test lint run migrate collect briefing docker-up docker-down
+.PHONY: build test lint run migrate collect briefing web docker-up docker-down
 
 build:
 	go build -o bin/radar ./cmd/radar
@@ -8,6 +8,9 @@ test:
 
 run: build
 	./bin/radar run -config config/radar.yaml
+
+web: build
+	./bin/radar web -config config/radar.yaml
 
 migrate: build
 	./bin/radar migrate -config config/radar.yaml

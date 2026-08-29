@@ -103,6 +103,23 @@ CREATE TABLE IF NOT EXISTS feed_state (
     last_fetched  TIMESTAMPTZ
 );
 `,
+    // 002 — bookmark + read state for the web dashboard
+    // is_bookmarked is set by the briefing pipeline for every item it surfaces.
+    // is_read is toggled by the user from the web UI; defaults to false.
+    // Hard delete is the supported removal path (no soft-delete flag).
+    `
+ALTER TABLE items
+    ADD COLUMN IF NOT EXISTS is_bookmarked BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS is_read       BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE INDEX IF NOT EXISTS items_bookmarked_unread_idx
+    ON items (collected_at DESC)
+    WHERE is_bookmarked = TRUE AND is_read = FALSE;
+
+CREATE INDEX IF NOT EXISTS items_bookmarked_all_idx
+    ON items (collected_at DESC)
+    WHERE is_bookmarked = TRUE;
+`,
 }
 
 // Migrate applies pending migrations inside a transaction per migration.

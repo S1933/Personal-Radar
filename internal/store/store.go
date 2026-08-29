@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/S1933/personal-radar/internal/db"
@@ -16,6 +17,10 @@ type Store struct {
 }
 
 func New(d *db.DB) *Store { return &Store{db: d} }
+
+// ErrNotFound is returned by single-row mutations (MarkRead, MarkUnread,
+// HardDelete) when the target id does not exist. The web API maps it to 404.
+var ErrNotFound = errors.New("not found")
 
 // InsertItem stores a normalized item. Returns the item id and true when the
 // row was newly inserted (false = duplicate source+source_id, merged).
@@ -313,4 +318,148 @@ func (s *Store) AllPreferences(ctx context.Context) (map[string]map[string]float
 		out[kind][name] = w
 	}
 	return out, rows.Err()
+}
+
+// Bookmark is the dashboard projection: an item joined with its score, plus
+// the user-facing bookmark/read flags.
+type Bookmark struct {
+	DBID         int64     `json:"id"`
+	Source       string    `json:"source"`
+	Title        string    `json:"title"`
+	URL          string    `json:"url"`
+	CanonicalURL string    `json:"canonical_url"`
+	Author       string    `json:"author"`
+	PublishedAt  time.Time `json:"published_at"`
+	CollectedAt  time.Time `json:"collected_at"`
+	Content      string    `json:"content"`
+	Topics       []string  `json:"topics"`
+	FinalScore   float64   `json:"final_score"`
+	IsRead       bool      `json:"is_read"`
+}
+
+// MarkBookmarked flags the given item ids as bookmarked. Idempotent. Used by
+// the briefing pipeline after a successful delivery so the dashboard stays
+// in sync with what was actually surfaced to the user.
+func (s *Store) MarkBookmarked(ctx context.Context, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE items SET is_bookmarked = TRUE
+		WHERE id = ANY($1) AND is_bookmarked = FALSE`, int64Array(ids))
+	return err
+}
+
+// MarkRead toggles the read flag on a single item. Returns ErrNotFound when
+// the id does not exist so the web API can surface 404 cleanly.
+func (s *Store) MarkRead(ctx context.Context, id int64) error {
+	return s.setReadFlag(ctx, id, true)
+}
+
+// MarkUnread clears the read flag on a single item.
+func (s *Store) MarkUnread(ctx context.Context, id int64) error {
+	return s.setReadFlag(ctx, id, false)
+}
+
+func (s *Store) setReadFlag(ctx context.Context, id int64, v bool) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE items SET is_read = $1 WHERE id = $2`, v, id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// HardDelete removes an item by id. CASCADE wipes scores / feedback /
+// item_sources. Returns ErrNotFound when the id does not exist.
+func (s *Store) HardDelete(ctx context.Context, id int64) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM items WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// BookmarkFilter narrows ListBookmarks to a read state.
+type BookmarkFilter string
+
+const (
+	BookmarkUnread BookmarkFilter = "unread"
+	BookmarkRead   BookmarkFilter = "read"
+	BookmarkAll    BookmarkFilter = "all"
+)
+
+// ListBookmarks returns the dashboard projection ordered by collection time
+// (newest first). The default filter is "unread" — the most common view.
+func (s *Store) ListBookmarks(ctx context.Context, filter BookmarkFilter, limit, offset int) ([]Bookmark, int, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	if filter == "" {
+		filter = BookmarkUnread
+	}
+
+	var whereClause string
+	switch filter {
+	case BookmarkUnread:
+		whereClause = "WHERE i.is_bookmarked = TRUE AND i.is_read = FALSE"
+	case BookmarkRead:
+		whereClause = "WHERE i.is_bookmarked = TRUE AND i.is_read = TRUE"
+	default: // BookmarkAll
+		whereClause = "WHERE i.is_bookmarked = TRUE"
+	}
+
+	var total int
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT count(*) FROM items i `+whereClause,
+	).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT i.id, i.source, i.title, i.url, i.canonical_url, i.author,
+		       i.published_at, i.collected_at, i.content, i.topics,
+		       COALESCE(s.final_score, 0), i.is_read
+		FROM items i
+		LEFT JOIN scores s ON s.item_id = i.id
+		`+whereClause+`
+		ORDER BY i.collected_at DESC
+		LIMIT $1 OFFSET $2`, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	out := make([]Bookmark, 0, limit)
+	for rows.Next() {
+		var b Bookmark
+		var published sql.NullTime
+		if err := rows.Scan(&b.DBID, &b.Source, &b.Title, &b.URL, &b.CanonicalURL,
+			&b.Author, &published, &b.CollectedAt, &b.Content, pqArray(&b.Topics),
+			&b.FinalScore, &b.IsRead); err != nil {
+			return nil, 0, err
+		}
+		if published.Valid {
+			b.PublishedAt = published.Time
+		}
+		out = append(out, b)
+	}
+	return out, total, rows.Err()
 }

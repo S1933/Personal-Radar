@@ -23,6 +23,7 @@ import (
 	"github.com/S1933/personal-radar/internal/scheduler"
 	"github.com/S1933/personal-radar/internal/store"
 	"github.com/S1933/personal-radar/internal/telegram"
+	"github.com/S1933/personal-radar/internal/web"
 )
 
 // App wires every component of the radar together. It owns the database
@@ -212,6 +213,32 @@ func (a *App) RankPending(ctx context.Context) (int, error) {
 // Briefing generates (and sends when configured) the daily briefing.
 func (a *App) Briefing(ctx context.Context) (string, error) {
 	return a.Briefer.Generate(ctx, briefing.SendOption(a.Cfg.Briefing.Send))
+}
+
+// WebAddr is the bind address for the bookmark dashboard (default
+// 127.0.0.1:8081). Override with RADAR_WEB_ADDR in the environment.
+func WebAddr() string {
+	if v := os.Getenv("RADAR_WEB_ADDR"); v != "" {
+		return v
+	}
+	return "127.0.0.1:8081"
+}
+
+// StartWeb launches the bookmark dashboard. Blocks until ctx is canceled.
+// Use Run() if you want the scheduler + telegram + web all together;
+// StartWeb is for `radar web` (dashboard-only mode).
+func (a *App) StartWeb(ctx context.Context) error {
+	srv := web.New(web.Config{Addr: WebAddr()}, a.Store, a.Log.With("sub", "web"))
+	errCh := make(chan error, 1)
+	go func() { errCh <- srv.Start() }()
+	select {
+	case <-ctx.Done():
+		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		return srv.Stop(shutCtx)
+	case err := <-errCh:
+		return err
+	}
 }
 
 // Run starts the scheduler (collection + briefing) and the telegram listener.
