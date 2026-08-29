@@ -2,117 +2,165 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <title>Personal Radar — Signets</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Signets — Personal Radar</title>
   <style>
+    /* ---------- base ---------- */
     :root {
-      --bg: #0f1115;
-      --panel: #181b22;
-      --panel-2: #1f232c;
-      --border: #2a2f3a;
-      --text: #e6e8ec;
-      --muted: #8b93a3;
-      --accent: #5b9dff;
-      --accent-2: #4a86e0;
-      --read: #6c7383;
-      --danger: #e06b6b;
-      --green: #5dc28a;
+      --bg: #0b0d10;
+      --panel: #12151a;
+      --panel-2: #1a1f26;
+      --border: #20262e;
+      --text: #e6e9ee;
+      --muted: #98a1ad;
+      --accent: #4f8ff7;
+      --danger: #e5484d;
     }
     * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
     body {
       margin: 0;
-      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background: var(--bg);
       color: var(--text);
+      font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
     }
+    a { color: inherit; text-decoration: none; }
+
+    /* ---------- header ---------- */
     header {
-      display: flex; align-items: center; gap: 16px;
-      padding: 14px 24px;
-      background: var(--panel);
-      border-bottom: 1px solid var(--border);
       position: sticky; top: 0; z-index: 10;
+      background: rgba(11, 13, 16, 0.92);
+      -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 14px;
+      padding-top: calc(10px + env(safe-area-inset-top));
+      display: flex; flex-direction: column; gap: 10px;
     }
-    header h1 { font-size: 16px; margin: 0; font-weight: 600; }
-    header .spacer { flex: 1; }
-    .filters { display: flex; gap: 4px; }
+    .header-top { display: flex; align-items: center; gap: 8px; }
+    .header-top h1 {
+      font-size: 15px; font-weight: 600; margin: 0; flex: 1;
+      letter-spacing: 0.01em;
+    }
+    .header-top h1 span { color: var(--muted); font-weight: 400; }
+    #refresh {
+      background: transparent; color: var(--muted);
+      border: 1px solid var(--border); border-radius: 8px;
+      padding: 7px 12px; font-size: 13px; cursor: pointer;
+      display: flex; align-items: center; gap: 6px;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #refresh:active { background: var(--panel-2); color: var(--text); }
+
+    /* filtres = segmented control */
+    .filters {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 3px; background: var(--panel); border: 1px solid var(--border);
+      border-radius: 10px; padding: 3px;
+    }
     .filters button {
-      background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
-      padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;
+      background: transparent; color: var(--muted); border: 0;
+      padding: 8px 0; border-radius: 8px; font-size: 13px; font-weight: 500;
+      cursor: pointer; -webkit-tap-highlight-color: transparent;
     }
     .filters button.active {
-      background: var(--accent); border-color: var(--accent); color: white;
+      background: var(--panel-2); color: var(--text);
     }
-    .filters button:hover:not(.active) { background: #252a35; }
-    main { max-width: 920px; margin: 24px auto; padding: 0 24px 80px; }
-    .summary { color: var(--muted); margin-bottom: 16px; font-size: 13px; }
+
+    /* ---------- liste ---------- */
+    main { max-width: 720px; margin: 0 auto; padding: 12px 14px calc(40px + env(safe-area-inset-bottom)); }
+    .summary { color: var(--muted); font-size: 12.5px; margin: 2px 2px 12px; }
+
     .card {
+      display: flex; gap: 12px;
       background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 14px 16px;
-      margin-bottom: 10px;
-      display: flex; gap: 12px; align-items: flex-start;
+      border-radius: 12px;
+      padding: 13px 13px 11px;
+      margin-bottom: 9px;
     }
-    .card.read { opacity: 0.55; }
+    .card.read { opacity: 0.5; }
     .card.read .title { text-decoration: line-through; }
-    .source-icon { font-size: 18px; line-height: 1; flex-shrink: 0; }
+
+    .source-icon {
+      width: 34px; height: 34px; flex-shrink: 0;
+      display: grid; place-items: center;
+      background: var(--panel-2); border-radius: 9px;
+      font-size: 17px;
+    }
     .body { flex: 1; min-width: 0; }
     .title {
-      font-weight: 600; font-size: 15px; color: var(--text);
-      text-decoration: none; display: block;
-    }
-    .title:hover { color: var(--accent); }
-    .meta {
-      margin-top: 4px; color: var(--muted); font-size: 12px;
-      display: flex; flex-wrap: wrap; gap: 10px;
-    }
-    .topics { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
-    .topic {
-      background: var(--panel-2); border: 1px solid var(--border);
-      padding: 1px 8px; border-radius: 10px; font-size: 11px; color: var(--muted);
+      font-size: 15px; font-weight: 600; line-height: 1.35;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      overflow: hidden;
     }
     .excerpt {
-      margin-top: 8px; color: var(--text); font-size: 13px;
-      line-height: 1.5; border-left: 2px solid var(--accent-2);
-      padding-left: 10px;
+      margin-top: 5px; color: var(--muted); font-size: 13px; line-height: 1.45;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      overflow: hidden;
     }
-    .excerpt.loading { color: var(--muted); font-style: italic; }
+    .excerpt.loading { color: #6b7480; font-style: italic; }
+    .meta {
+      margin-top: 7px; color: var(--muted); font-size: 12px;
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    }
+    .meta .dot { color: #3a4350; }
+
+    /* actions */
     .actions { display: flex; gap: 6px; flex-shrink: 0; }
     .actions button {
       background: transparent; color: var(--muted);
-      border: 1px solid var(--border);
-      padding: 4px 10px; border-radius: 4px; cursor: pointer;
-      font-size: 12px;
+      border: 1px solid var(--border); border-radius: 8px;
+      padding: 8px 11px; font-size: 12px; cursor: pointer;
+      min-height: 34px; -webkit-tap-highlight-color: transparent;
+      display: flex; align-items: center; gap: 4px;
     }
-    .actions button:hover { color: var(--text); border-color: var(--accent); }
-    .actions .delete:hover { color: var(--danger); border-color: var(--danger); }
-    .empty {
-      text-align: center; padding: 60px 20px; color: var(--muted);
-    }
+    .actions button:active { background: var(--panel-2); }
+    .actions button.done { color: var(--accent); border-color: rgba(79,143,247,0.35); }
+    .actions .delete { color: #8a4a4d; border-color: transparent; }
+    .actions .delete:active { color: var(--danger); }
+
+    .empty { text-align: center; color: var(--muted); padding: 70px 20px; font-size: 14px; }
+    .empty small { display: block; margin-top: 6px; color: #5d6672; }
+
     .toast {
-      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-      background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
-      padding: 10px 16px; border-radius: 6px; font-size: 13px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-      opacity: 0; pointer-events: none; transition: opacity 0.2s;
+      position: fixed; bottom: calc(20px + env(safe-area-inset-bottom));
+      left: 50%; transform: translateX(-50%);
+      background: var(--panel-2); color: var(--text);
+      border: 1px solid var(--border); border-radius: 10px;
+      padding: 10px 18px; font-size: 13px;
+      opacity: 0; pointer-events: none; transition: opacity 0.18s;
+      white-space: nowrap; max-width: 90vw; overflow: hidden; text-overflow: ellipsis;
     }
     .toast.show { opacity: 1; }
+
+    /* ---------- desktop ---------- */
+    @media (min-width: 640px) {
+      body { font-size: 15px; }
+      header { padding: 12px 24px; flex-direction: row; align-items: center; gap: 16px; }
+      header .filters { width: 300px; margin-left: auto; }
+      .header-top h1 { flex: 0; }
+      main { padding: 20px 24px 60px; }
+      .card { padding: 15px 16px 13px; }
+      .title { -webkit-line-clamp: 1; }
+      .actions { align-items: center; }
+    }
   </style>
 </head>
 <body>
   <header>
-    <h1>📡 Personal Radar — Signets</h1>
+    <div class="header-top">
+      <h1>Signets <span id="count"></span></h1>
+      <button id="refresh" title="Rafraîchir">↻ <span class="refresh-label">Rafraîchir</span></button>
+    </div>
     <div class="filters">
       <button data-filter="unread" class="active">Non lus</button>
       <button data-filter="read">Lus</button>
       <button data-filter="all">Tous</button>
     </div>
-    <div class="spacer"></div>
-    <button id="refresh" style="background: var(--panel-2); color: var(--text); border: 1px solid var(--border); padding: 6px 12px; border-radius: 6px; cursor: pointer;">↻ Rafraîchir</button>
   </header>
   <main>
-    <div id="summary" class="summary">Chargement…</div>
-    <div id="list"></div>
+    <div id="list"><div class="empty">Chargement…</div></div>
   </main>
   <div id="toast" class="toast"></div>
   <script>
@@ -155,69 +203,66 @@
         <div class="source-icon">${icon}</div>
         <div class="body">
           <a class="title" href="${escape(url)}" target="_blank" rel="noopener">${escape(b.title || "(sans titre)")}</a>
+          <div class="excerpt loading" id="excerpt-${b.id}">Résumé…</div>
           <div class="meta">
             <span>${escape(srcLabel)}</span>
-            ${b.author ? `<span>· ${escape(b.author)}</span>` : ""}
-            <span>· ${fmtTime(b.collected_at)}</span>
-            ${b.final_score ? `<span>· ⭐ ${b.final_score.toFixed(2)}</span>` : ""}
+            <span class="dot">·</span>
+            <span>${fmtTime(b.collected_at)}</span>
           </div>
-          ${b.topics && b.topics.length ? `<div class="topics">${b.topics.map(t => `<span class="topic">${escape(t)}</span>`).join("")}</div>` : ""}
-          <div class="excerpt loading" id="excerpt-${b.id}">Chargement du résumé…</div>
         </div>
         <div class="actions">
           ${b.is_read
-            ? `<button data-action="unread" data-id="${b.id}">↩ Non lu</button>`
-            : `<button data-action="read" data-id="${b.id}">✓ Lu</button>`}
-          <button class="delete" data-action="delete" data-id="${b.id}">✕</button>
+            ? `<button class="done" data-action="unread" data-id="${b.id}" title="Marquer non lu">↩</button>`
+            : `<button class="done" data-action="read" data-id="${b.id}" title="Marquer lu">✓</button>`}
+          <button class="delete" data-action="delete" data-id="${b.id}" title="Supprimer">✕</button>
         </div>
       `;
       return card;
     }
 
-    // Lazy-load the French summary for an item; safe against races by
-    // checking the element still exists.
     async function loadSummary(id) {
       const el = document.getElementById(`excerpt-${id}`);
       try {
         const data = await fetchJSON(`/api/summary/${id}`);
         if (el) {
           el.classList.remove("loading");
-          el.textContent = data.summary;
+          el.textContent = data.summary || "—";
         }
       } catch (e) {
         if (el) {
           el.classList.remove("loading");
-          el.textContent = "⚠️ Résumé indisponible";
+          el.textContent = "Résumé indisponible";
         }
       }
     }
 
     async function load() {
       const list = document.getElementById("list");
-      const summaryEl = document.getElementById("summary");
-      list.innerHTML = `<div class="empty">Chargement…</div>`;
+      const count = document.getElementById("count");
       try {
         const data = await fetchJSON(`/api/bookmarks?filter=${currentFilter}&limit=100`);
-        summaryEl.textContent = `${data.total} article${data.total !== 1 ? "s" : ""} (${FILTER_LABEL[currentFilter] || currentFilter})`;
+        count.textContent = data.total ? `· ${data.total}` : "";
         if (!data.items.length) {
-          list.innerHTML = `<div class="empty">Rien pour l'instant. Le prochain briefing remplira cette liste.</div>`;
+          list.innerHTML = `<div class="empty">Rien à afficher<small>Le prochain briefing alimentera cette liste.</small></div>`;
           return;
         }
         list.innerHTML = "";
-        for (const b of data.items) {
-          list.appendChild(renderItem(b));
-          loadSummary(b.id);  // fire-and-forget; result rendered when it arrives
-        }
+        const frag = document.createDocumentFragment();
+        for (const b of data.items) frag.appendChild(renderItem(b));
+        list.appendChild(frag);
+        for (const b of data.items) loadSummary(b.id);
       } catch (e) {
         list.innerHTML = `<div class="empty">⚠️ ${escape(e.message)}</div>`;
       }
     }
 
+    let toastTimer;
     function toast(msg) {
       const t = document.getElementById("toast");
       t.textContent = msg;
       t.classList.add("show");
-      setTimeout(() => t.classList.remove("show"), 1800);
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.remove("show"), 1800);
     }
 
     document.addEventListener("click", async (e) => {
@@ -225,7 +270,9 @@
       if (btn) {
         const id = btn.dataset.id;
         const action = btn.dataset.action;
-        if (action === "delete" && !confirm("Supprimer définitivement cet article ?")) return;
+        if (action === "delete" && !confirm("Supprimer définitivement ?")) return;
+        const prev = btn.innerHTML;
+        btn.disabled = true;
         try {
           if (action === "delete") {
             await fetchJSON(`/api/bookmarks/${id}`, { method: "DELETE" });
@@ -235,6 +282,7 @@
           toast(action === "delete" ? "Supprimé" : (action === "read" ? "Marqué lu" : "Marqué non lu"));
           load();
         } catch (err) {
+          btn.disabled = false;
           toast("Erreur : " + err.message);
         }
         return;
@@ -246,11 +294,11 @@
         load();
         return;
       }
-      if (e.target.id === "refresh") load();
+      if (e.target.id === "refresh" || e.target.closest("#refresh")) load();
     });
 
     load();
-    // Pas d'auto-reload : l'utilisateur rafraîchit manuellement.
+    // Pas d'auto-reload : rafraîchissement manuel uniquement.
   </script>
 </body>
 </html>
