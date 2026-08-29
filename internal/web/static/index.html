@@ -22,7 +22,7 @@
       margin: 0;
       background: var(--bg);
       color: var(--text);
-      font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       -webkit-font-smoothing: antialiased;
     }
     a { color: inherit; text-decoration: none; }
@@ -35,7 +35,7 @@
       border-bottom: 1px solid var(--border);
       padding: 10px 14px;
       padding-top: calc(10px + env(safe-area-inset-top));
-      display: flex; flex-direction: column; gap: 10px;
+      display: flex; flex-direction: column; gap: 9px;
     }
     .header-top { display: flex; align-items: center; gap: 8px; }
     .header-top h1 {
@@ -49,8 +49,11 @@
       padding: 7px 12px; font-size: 13px; cursor: pointer;
       display: flex; align-items: center; gap: 6px;
       -webkit-tap-highlight-color: transparent;
+      flex-shrink: 0;
     }
     #refresh:active { background: var(--panel-2); color: var(--text); }
+    /* mobile: icon-only refresh */
+    .refresh-label { display: none; }
 
     /* filtres = segmented control */
     .filters {
@@ -67,42 +70,68 @@
       background: var(--panel-2); color: var(--text);
     }
 
+    /* tagbar: category chips with per-tag counts (horizontal scroll) */
+    .tagbar {
+      display: flex; gap: 6px;
+      overflow-x: auto; padding: 2px 1px 3px;
+      scrollbar-width: none; -webkit-overflow-scrolling: touch;
+    }
+    .tagbar::-webkit-scrollbar { display: none; }
+    .tagbar .tag { white-space: nowrap; }
+    .tagbar .tag .count { opacity: 0.65; margin-left: 3px; font-weight: 500; }
+
     /* ---------- liste ---------- */
-    main { max-width: 720px; margin: 0 auto; padding: 12px 14px calc(40px + env(safe-area-inset-bottom)); }
+    main { max-width: 1320px; margin: 0 auto; padding: 12px 14px calc(40px + env(safe-area-inset-bottom)); }
     .summary { color: var(--muted); font-size: 12.5px; margin: 2px 2px 12px; }
 
     .card {
-      display: flex; flex-direction: column; gap: 7px;
+      display: flex; flex-direction: column; gap: 8px;
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 13px 14px 11px;
+      padding: 14px 14px 12px;
       margin-bottom: 9px;
+      transition: transform 0.15s ease, border-color 0.15s ease;
     }
-    .card.read { opacity: 0.5; }
-    .card.read .title { text-decoration: line-through; }
     .card.liked { border-color: rgba(229, 72, 77, 0.35); }
-
-    .card-head { display: flex; gap: 10px; align-items: flex-start; }
-    .source-icon {
-      width: 34px; height: 34px; flex-shrink: 0;
-      display: grid; place-items: center;
-      background: var(--panel-2); border-radius: 9px;
-      font-size: 17px;
+    /* uniform footer alignment: push tags+footer to the bottom of the card */
+    .tags { margin-top: auto; padding-top: 6px; }
+    .card-foot { margin-top: auto; }
+    @media (min-width: 640px) {
+      .card:hover {
+        transform: translateY(-2px);
+        border-color: #2e3642;
+      }
     }
-    .body { flex: 1; min-width: 0; }
+
+    /* title: level-1, clickable affordance */
     .title {
-      font-size: 15px; font-weight: 600; line-height: 1.35;
+      font-size: 16px; font-weight: 600; line-height: 1.35;
       display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
       overflow: hidden;
+      transition: color 0.12s;
     }
-    .excerpt {
-      color: #aab4c0; font-size: 15px; line-height: 1.5;
-    }
-    .excerpt.loading { color: #6b7480; font-style: italic; }
-    .excerpt.placeholder { color: #6b7480; font-style: italic; }
+    .title .ext { font-size: 11px; opacity: 0.55; margin-left: 3px; vertical-align: 2px; }
+    .title:hover { color: var(--accent); }
+    .title:hover .ext { opacity: 1; }
 
-    /* tags: small chips categorizing the card */
+    /* excerpt: collapsible French description */
+    .excerpt {
+      color: #aab4c0; font-size: 14px; line-height: 1.5;
+      display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .excerpt.expanded { -webkit-line-clamp: unset; }
+    .excerpt.loading { color: #6b7480; font-style: italic; }
+    .excerpt-more {
+      background: none; border: 0; padding: 0;
+      color: var(--accent); font-size: 12.5px; cursor: pointer;
+      align-self: flex-start;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .excerpt-more:hover { text-decoration: underline; }
+
+    /* tags: chips on the card */
     .tags { display: flex; flex-wrap: wrap; gap: 5px; }
     .tag {
       background: var(--panel-2);
@@ -110,35 +139,35 @@
       color: var(--muted);
       border-radius: 999px;
       padding: 3px 10px;
-      font-size: 11px;
+      font-size: 11.5px;
       line-height: 1.3;
       cursor: pointer;
       -webkit-tap-highlight-color: transparent;
     }
     .tag:hover { color: var(--text); border-color: var(--accent); }
-    .tag.active { background: var(--accent); border-color: var(--accent); color: white; }
-    /* hidden by tag filter */
+    .tag.active {
+      background: var(--accent); border-color: var(--accent);
+      color: white; font-weight: 600;
+      box-shadow: 0 0 0 1px rgba(79,143,247,0.25);
+    }
     .card.filtered-out { display: none; }
 
-    /* footer: meta (source · date) on the left, actions on the right */
+    /* footer: meta (source · date) left, actions right */
     .card-foot {
       display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-      margin-top: 4px; padding-top: 9px;
+      margin-top: auto; padding-top: 9px;
       border-top: 1px solid var(--border);
     }
     .meta {
-      color: var(--muted); font-size: 12.5px;
-      display: flex; align-items: center; gap: 6px;
+      color: var(--muted); font-size: 12px;
+      display: flex; align-items: center; gap: 5px;
       min-width: 0;
     }
     .meta .dot { color: #3a4350; }
+    .meta .src-icon { font-size: 12px; }
     .meta .src { font-weight: 500; color: #b9c1cc; }
 
-    /* actions: row on the right side of the footer */
-    .actions {
-      display: flex; gap: 6px;
-      margin-left: auto; /* push to the right */
-    }
+    .actions { display: flex; gap: 6px; margin-left: auto; }
     .actions button {
       background: transparent; color: var(--muted);
       border: 1px solid var(--border); border-radius: 8px;
@@ -169,20 +198,20 @@
     /* ---------- desktop ---------- */
     @media (min-width: 640px) {
       body { font-size: 15px; }
-      header { padding: 12px 24px; flex-direction: row; align-items: center; gap: 16px; }
-      header .filters { width: 300px; margin-left: auto; }
-      .header-top h1 { flex: 0; }
-      main { max-width: 1280px; padding: 20px 24px 60px; }
-      /* multi-column grid: each card ≥ 340px, expands to fill the row */
+      header { padding: 12px 24px 10px; flex-direction: row; align-items: center; gap: 16px; flex-wrap: wrap; }
+      header .filters { width: 300px; order: 2; }
+      header .tagbar { order: 3; width: 100%; }
+      .header-top { flex: 1; }
+      .refresh-label { display: inline; }
+      main { padding: 20px 24px 60px; }
       #list {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-        gap: 12px;
+        gap: 14px;
         align-items: start;
       }
       .card { margin-bottom: 0; }
-      .title { -webkit-line-clamp: 2; }
-      .actions { align-items: center; }
+      .excerpt:hover { color: #bcc5d0; }
     }
   </style>
 </head>
@@ -197,6 +226,7 @@
       <button data-filter="liked">Likés</button>
       <button data-filter="all">Tous</button>
     </div>
+    <div class="tagbar" id="tagbar" hidden></div>
   </header>
   <main>
     <div id="list"><div class="empty">Chargement…</div></div>
@@ -206,7 +236,26 @@
     const SOURCE_ICON = { github: "🐙", x: "🐦", reddit: "🔴", "reddit-public": "🔴", rss: "📰", linkedin: "💼" };
     const SOURCE_LABEL = { github: "GitHub", x: "X", reddit: "Reddit", "reddit-public": "Reddit", rss: "Flux RSS", linkedin: "LinkedIn" };
     const FILTER_LABEL = { unread: "non lus", liked: "likés", all: "tous" };
+    // French labels for the category chips
+    const TAG_LABEL = {
+      "software-engineering": "génie logiciel",
+      "open-source": "open source",
+      "ai": "IA",
+      "devops": "DevOps",
+      "go": "Go",
+      "cluster": "cluster",
+      "llm": "LLM",
+      "agents": "agents",
+      "infra": "infra",
+      "rust": "Rust",
+      "python": "Python",
+      "security": "sécurité",
+      "data": "data",
+      "web": "web",
+      "mobile": "mobile",
+    };
     let currentFilter = "unread";
+    let activeTag = null;
 
     async function fetchJSON(url, opts) {
       const r = await fetch(url, opts);
@@ -226,6 +275,10 @@
       return d.toLocaleDateString("fr-FR");
     }
 
+    function hostname(u) {
+      try { return new URL(u).hostname.replace(/^www\./, ""); } catch (e) { return ""; }
+    }
+
     function escape(s) {
       return (s || "").replace(/[&<>"']/g, c => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
@@ -236,22 +289,22 @@
       const icon = SOURCE_ICON[b.source] || "•";
       const srcLabel = SOURCE_LABEL[b.source] || b.source;
       const url = b.url || b.canonical_url || "#";
+      const dom = hostname(url);
+      const topics = b.topics || [];
       const card = document.createElement("div");
       card.className = "card" + (b.is_liked ? " liked" : "");
-      card.dataset.tags = (b.topics || []).join("|");
-      const tags = (b.topics || []).slice(0, 3); // keep the card compact
+      card.dataset.tags = topics.join("|");
+      // max 2 visible chips + "+N" overflow indicator
+      const chips = topics.slice(0, 2);
+      const rest = topics.length - 2;
       card.innerHTML = `
-        <div class="card-head">
-          <div class="source-icon">${icon}</div>
-          <div class="body">
-            <a class="title" href="${escape(url)}" target="_blank" rel="noopener">${escape(b.title || "(sans titre)")}</a>
-          </div>
-        </div>
+        <a class="title" href="${escape(url)}" target="_blank" rel="noopener">${escape(b.title || "(sans titre)")}<span class="ext">↗</span></a>
         <div class="excerpt loading" id="excerpt-${b.id}">Résumé…</div>
-        ${tags.length ? `<div class="tags">${tags.map(t => `<button class="tag" data-tag="${escape(t)}">${escape(t)}</button>`).join("")}</div>` : ""}
+        ${chips.length ? `<div class="tags">${chips.map(t => `<button class="tag" data-tag="${escape(t)}">${escape(TAG_LABEL[t] || t)}</button>`).join("")}${rest > 0 ? `<span class="tag">+${rest}</span>` : ""}</div>` : ""}
         <div class="card-foot">
           <div class="meta">
-            <span class="src">${escape(srcLabel)}</span>
+            <span class="src-icon">${icon}</span>
+            <span class="src">${escape(dom || srcLabel)}</span>
             <span class="dot">·</span>
             <span>${fmtTime(b.collected_at)}</span>
           </div>
@@ -266,6 +319,24 @@
       return card;
     }
 
+    // Add / refresh the "… voir plus" toggle when the excerpt overflows its 4-line clamp.
+    function maybeAddMore(id) {
+      const el = document.getElementById(`excerpt-${id}`);
+      const existing = document.getElementById(`more-${id}`);
+      if (!el || el.classList.contains("expanded")) { if (existing) existing.hidden = true; return; }
+      if (el.scrollHeight > el.clientHeight + 1) {
+        if (existing) { existing.hidden = false; return; }
+        const m = document.createElement("button");
+        m.className = "excerpt-more";
+        m.id = `more-${id}`;
+        m.dataset.more = id;
+        m.textContent = "… voir plus";
+        el.insertAdjacentElement("afterend", m);
+      } else if (existing) {
+        existing.hidden = true;
+      }
+    }
+
     async function loadSummary(id) {
       const el = document.getElementById(`excerpt-${id}`);
       try {
@@ -273,6 +344,7 @@
         if (el) {
           el.classList.remove("loading");
           el.textContent = data.summary || "—";
+          maybeAddMore(id);
         }
       } catch (e) {
         if (el) {
@@ -282,12 +354,36 @@
       }
     }
 
+    // tagbar: top categories among the loaded items, each with a count.
+    function renderTagBar(items) {
+      const bar = document.getElementById("tagbar");
+      const counts = {};
+      items.forEach(b => (b.topics || []).forEach(t => counts[t] = (counts[t] || 0) + 1));
+      const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
+      if (!sorted.length) { bar.hidden = true; bar.innerHTML = ""; return; }
+      bar.hidden = false;
+      bar.innerHTML = sorted.map(([t, c]) =>
+        `<button class="tag" data-tag="${escape(t)}">${escape(TAG_LABEL[t] || t)} <span class="count">${c}</span></button>`
+      ).join("");
+    }
+
+    function applyTagFilter() {
+      const cards = document.querySelectorAll(".card");
+      cards.forEach(c => {
+        const tags = (c.dataset.tags || "").split("|");
+        const show = !activeTag || tags.includes(activeTag);
+        c.classList.toggle("filtered-out", !show);
+      });
+      document.querySelectorAll(".tag").forEach(t => t.classList.toggle("active", t.dataset.tag === activeTag));
+    }
+
     async function load() {
       const list = document.getElementById("list");
       const count = document.getElementById("count");
       try {
         const data = await fetchJSON(`/api/bookmarks?filter=${currentFilter}&limit=100`);
         count.textContent = data.total ? `· ${data.total}` : "";
+        renderTagBar(data.items);
         if (!data.items.length) {
           list.innerHTML = `<div class="empty">Rien à afficher<small>Le prochain briefing alimentera cette liste.</small></div>`;
           return;
@@ -297,6 +393,7 @@
         for (const b of data.items) frag.appendChild(renderItem(b));
         list.appendChild(frag);
         for (const b of data.items) loadSummary(b.id);
+        applyTagFilter(); // re-apply in case a tag filter is active
       } catch (e) {
         list.innerHTML = `<div class="empty">⚠️ ${escape(e.message)}</div>`;
       }
@@ -311,24 +408,21 @@
       toastTimer = setTimeout(() => t.classList.remove("show"), 1800);
     }
 
-    let activeTag = null;
-
-    // Tag filter: toggle cards client-side when a chip is clicked.
-    function applyTagFilter() {
-      const cards = document.querySelectorAll(".card");
-      cards.forEach(c => {
-        const tags = (c.dataset.tags || "").split("|");
-        const show = !activeTag || tags.includes(activeTag);
-        c.classList.toggle("filtered-out", !show);
-      });
-      document.querySelectorAll(".tag").forEach(t => t.classList.toggle("active", t.dataset.tag === activeTag));
-    }
-
     document.addEventListener("click", async (e) => {
+      // tag filter (card chips + tagbar chips)
       const tagBtn = e.target.closest(".tag");
-      if (tagBtn) {
+      if (tagBtn && tagBtn.dataset.tag) {
         activeTag = (activeTag === tagBtn.dataset.tag) ? null : tagBtn.dataset.tag;
         applyTagFilter();
+        return;
+      }
+      // expand / collapse description
+      const moreBtn = e.target.closest("button[data-more]");
+      if (moreBtn) {
+        const id = moreBtn.dataset.more;
+        const el = document.getElementById(`excerpt-${id}`);
+        const expanded = el.classList.toggle("expanded");
+        moreBtn.textContent = expanded ? "masquer" : "… voir plus";
         return;
       }
       const btn = e.target.closest("button[data-action]");
