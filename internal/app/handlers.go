@@ -15,7 +15,7 @@ import (
 func (a *App) TelegramHandlers() map[string]telegram.Handler {
 	cmdHandler := &commandHandler{app: a}
 	out := map[string]telegram.Handler{}
-	for _, name := range []string{"start", "today", "deepdive", "save", "ignore", "more", "less", "sources", "status", "reaction", "ask", "newchat"} {
+	for _, name := range []string{"start", "today", "deepdive", "save", "ignore", "more", "less", "sources", "status", "reaction"} {
 		out[name] = cmdHandler
 	}
 	return out
@@ -111,82 +111,8 @@ func (h *commandHandler) Handle(ctx context.Context, cmd telegram.Command) (stri
 			return "", fmt.Errorf("usage: /deepdive <id>")
 		}
 		return a.DeepDiveItem(ctx, int64(cmd.ItemID))
-
-	case "ask":
-		// Forward the prompt to the local Hermes bridge (radar_bridge.py on the
-		// host). The bridge calls `hermes chat -q` with --continue so messages
-		// share the same conversation thread across calls.
-		text := strings.TrimSpace(strings.TrimPrefix(cmd.Text, "/ask"))
-		if text == "" {
-			return "", fmt.Errorf("usage: /ask <question>")
-		}
-		return askHermes(ctx, text)
-
-	case "newchat":
-		// Start a fresh Hermes session (no --continue). Next /ask starts clean.
-		text := strings.TrimSpace(strings.TrimPrefix(cmd.Text, "/newchat"))
-		return askHermesRaw(ctx, text, true)
 	}
 	return "", nil
-}
-
-// askHermes forwards the prompt to the bridge using --continue (resume
-// the most recent session so messages share context).
-func askHermes(ctx context.Context, prompt string) (string, error) {
-	return askHermesRaw(ctx, prompt, false)
-}
-
-// askHermesRaw POSTs {prompt, fresh} to HERMES_BRIDGE_URL and returns the
-// assistant reply. fresh=true → bridge starts a new session instead of
-// resuming the previous one.
-func askHermesRaw(ctx context.Context, prompt string, fresh bool) (string, error) {
-	url := os.Getenv("HERMES_BRIDGE_URL")
-	if url == "" {
-		url = "http://172.19.0.1:8765/ask"
-	}
-	body, err := json.Marshal(map[string]any{"prompt": prompt, "fresh": fresh})
-	if err != nil {
-		return "", err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if token := os.Getenv("HERMES_BRIDGE_TOKEN"); token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-	client := &http.Client{Timeout: 120 * time.Second}
-	res, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("bridge unreachable: %w", err)
-	}
-	defer res.Body.Close()
-	raw, _ := io.ReadAll(io.LimitReader(res.Body, 64*1024))
-	if res.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("bridge HTTP %d: %s", res.StatusCode, truncate(string(raw), 200))
-	}
-	var parsed struct {
-		Reply string `json:"reply"`
-		Error string `json:"error"`
-	}
-	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return "", fmt.Errorf("bridge bad json: %w", err)
-	}
-	if parsed.Error != "" {
-		return "", fmt.Errorf("%s", parsed.Error)
-	}
-	if parsed.Reply == "" {
-		return "", fmt.Errorf("bridge returned empty reply")
-	}
-	return parsed.Reply, nil
-}
-
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "…"
 }
 
 func enabled(b bool) string {
