@@ -45,16 +45,28 @@
       min-width: 0;
     }
     .header-top h1 span { color: var(--muted); font-weight: 400; }
-    /* discreet mark-all-read action, inline with the counter */
+    /* floating mark-all-read button, centered at the bottom of the screen */
     #readall {
-      background: none; border: 0; padding: 0;
-      color: #6b7480; font-size: 12px; font-weight: 400;
-      cursor: pointer; white-space: nowrap; flex-shrink: 0;
+      position: fixed;
+      bottom: calc(22px + env(safe-area-inset-bottom));
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--panel-2);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 11px 22px;
+      font-size: 13px; font-weight: 500;
+      cursor: pointer; white-space: nowrap;
+      display: flex; align-items: center; gap: 7px;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+      z-index: 20;
       -webkit-tap-highlight-color: transparent;
+      transition: color 0.12s, border-color 0.12s, background 0.12s;
     }
-    #readall:hover { color: var(--accent); }
-    #readall::before { content: "✓ "; }
-    #readall:hover::before { content: "✓ "; }
+    #readall::before { content: "✓"; font-weight: 700; }
+    #readall:hover { color: var(--text); border-color: var(--accent); background: #222936; }
+    #readall:active { transform: translateX(-50%) scale(0.97); }
     #refresh {
       background: transparent; color: var(--muted);
       border: 1px solid var(--border); border-radius: 8px;
@@ -93,7 +105,7 @@
     .tagbar .tag .count { opacity: 0.65; margin-left: 3px; font-weight: 500; }
 
     /* ---------- liste ---------- */
-    main { max-width: 1320px; margin: 0 auto; padding: 12px 14px calc(40px + env(safe-area-inset-bottom)); }
+    main { max-width: 1320px; margin: 0 auto; padding: 12px 14px calc(96px + env(safe-area-inset-bottom)); }
     .summary { color: var(--muted); font-size: 12.5px; margin: 2px 2px 12px; }
 
     .card {
@@ -189,13 +201,14 @@
     .empty small { display: block; margin-top: 6px; color: #5d6672; }
 
     .toast {
-      position: fixed; bottom: calc(20px + env(safe-area-inset-bottom));
+      position: fixed; bottom: calc(76px + env(safe-area-inset-bottom));
       left: 50%; transform: translateX(-50%);
       background: var(--panel-2); color: var(--text);
       border: 1px solid var(--border); border-radius: 10px;
       padding: 10px 18px; font-size: 13px;
       opacity: 0; pointer-events: none; transition: opacity 0.18s;
       white-space: nowrap; max-width: 90vw; overflow: hidden; text-overflow: ellipsis;
+      z-index: 21;
     }
     .toast.show { opacity: 1; }
 
@@ -222,7 +235,7 @@
 <body>
   <header>
     <div class="header-top">
-      <h1>Signets <span id="count"></span><button id="readall" title="Marquer tout comme lu" onclick="markAllRead()">tout lu</button></h1>
+      <h1>Signets <span id="count"></span></h1>
       <button id="refresh" title="Rafraîchir" onclick="load()">↻ <span class="refresh-label">Rafraîchir</span></button>
     </div>
     <div class="filters">
@@ -235,6 +248,7 @@
   <main>
     <div id="list"><div class="empty">Chargement…</div></div>
   </main>
+  <button id="readall" title="Marquer tout comme lu" onclick="markAllRead()">Tout marquer lu</button>
   <div id="toast" class="toast"></div>
   <script>
     const SOURCE_ICON = { github: "🐙", x: "🐦", reddit: "🔴", "reddit-public": "🔴", rss: "📰", linkedin: "💼" };
