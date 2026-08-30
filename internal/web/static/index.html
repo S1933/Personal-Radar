@@ -132,20 +132,11 @@
     .excerpt {
       color: #c8cfd9; font-size: 15px; line-height: 1.45;
       font-weight: 500;
-      display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical;
-      overflow: hidden;
+      max-width: 100%;
       transition: color 0.12s;
     }
-    .excerpt.expanded { -webkit-line-clamp: unset; }
     .excerpt.loading { color: #6b7480; font-style: italic; font-weight: 400; }
     a.excerpt:hover { color: var(--accent); }
-    .excerpt-more {
-      background: none; border: 0; padding: 0;
-      color: var(--accent); font-size: 12.5px; cursor: pointer;
-      align-self: flex-start;
-      -webkit-tap-highlight-color: transparent;
-    }
-    .excerpt-more:hover { text-decoration: underline; }
 
     /* tags: chips on the card */
     .tags { display: flex; flex-wrap: wrap; gap: 5px; }
@@ -334,24 +325,6 @@
       return card;
     }
 
-    // Add / refresh the "… voir plus" toggle when the excerpt overflows its 4-line clamp.
-    function maybeAddMore(id) {
-      const el = document.getElementById(`excerpt-${id}`);
-      const existing = document.getElementById(`more-${id}`);
-      if (!el || el.classList.contains("expanded")) { if (existing) existing.hidden = true; return; }
-      if (el.scrollHeight > el.clientHeight + 1) {
-        if (existing) { existing.hidden = false; return; }
-        const m = document.createElement("button");
-        m.className = "excerpt-more";
-        m.id = `more-${id}`;
-        m.dataset.more = id;
-        m.textContent = "… voir plus";
-        el.insertAdjacentElement("afterend", m);
-      } else if (existing) {
-        existing.hidden = true;
-      }
-    }
-
     async function loadSummary(id) {
       const el = document.getElementById(`excerpt-${id}`);
       try {
@@ -359,7 +332,6 @@
         if (el) {
           el.classList.remove("loading");
           el.textContent = data.summary || "—";
-          maybeAddMore(id);
         }
       } catch (e) {
         if (el) {
@@ -450,15 +422,6 @@
       if (tagBtn && tagBtn.dataset.tag) {
         activeTag = (activeTag === tagBtn.dataset.tag) ? null : tagBtn.dataset.tag;
         applyTagFilter();
-        return;
-      }
-      // expand / collapse description
-      const moreBtn = e.target.closest("button[data-more]");
-      if (moreBtn) {
-        const id = moreBtn.dataset.more;
-        const el = document.getElementById(`excerpt-${id}`);
-        const expanded = el.classList.toggle("expanded");
-        moreBtn.textContent = expanded ? "masquer" : "… voir plus";
         return;
       }
       const btn = e.target.closest("button[data-action]");

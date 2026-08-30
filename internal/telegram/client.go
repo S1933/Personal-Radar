@@ -31,9 +31,10 @@ type Handler interface {
 
 // Command is a parsed user interaction.
 type Command struct {
-	Action string // start, today, deepdive, save, ignore, more, less, sources, status, reaction
+	Action string // start, today, deepdive, save, ignore, more, less, sources, status, reaction, ask, newchat
 	ItemID int64
 	Emoji  string
+	Text   string // full message text (used by handlers that need the raw prompt)
 }
 
 func NewClient(cfg config.TelegramConfig, log *logging.Logger) (*Client, error) {
@@ -181,7 +182,7 @@ func parse(text string) Command {
 		return Command{}
 	}
 	cmd := strings.TrimPrefix(fields[0], "/")
-	c := Command{Action: cmd}
+	c := Command{Action: cmd, Text: t}
 	if len(fields) > 1 {
 		if id, err := strconv.ParseInt(fields[1], 10, 64); err == nil {
 			c.ItemID = id
