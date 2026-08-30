@@ -143,7 +143,7 @@ func (s *Service) put(id int64, summary string) {
 // synthesizer: French, concise, no fluff.
 func (s *Service) call(ctx context.Context, title, content, source string) (string, error) {
 	prompt := fmt.Sprintf(
-		"Source: %s\nTitre: %s\nExtrait: %s\n\nÉcris UNE SEULE phrase factuelle (max 140 caractères) résumant cet article pour un lecteur qui veut scanner vite. Style télégraphique : sujet + point clé, sans introduction (interdit : « Cet article... », « Ce fil... »), sans conclusion (« L'enjeu est... »), sans marketing, sans emoji. Le résultat doit être directement lisible dans une card de dashboard.",
+		"Source: %s\nTitre: %s\nExtrait: %s\n\nÉcris en français 2 à 3 phrases courtes et factuelles (200 à 280 caractères au total) résumant cet article pour un lecteur qui scanne vite : sujet + point clé + un détail utile. Interdit : introduction (« Cet article... », « Ce fil... »), conclusion (« L'enjeu est... », « Pour conclure »), marketing, emoji. Le résultat doit être directement lisible dans une card de dashboard.",
 		source, title, truncate(content, 700))
 
 	body, err := json.Marshal(map[string]any{
@@ -153,7 +153,7 @@ func (s *Service) call(ctx context.Context, title, content, source string) (stri
 			{"role": "user", "content": prompt},
 		},
 		"temperature": 0.2,
-		"max_tokens":  60,
+		"max_tokens":  120,
 	})
 	if err != nil {
 		return "", err
@@ -207,8 +207,8 @@ func clean(s string) string {
 	for strings.Contains(s, "  ") {
 		s = strings.ReplaceAll(s, "  ", " ")
 	}
-	if len(s) > 160 {
-		s = s[:157] + "..."
+	if len(s) > 320 {
+		s = s[:317] + "..."
 	}
 	return strings.TrimSpace(s)
 }
