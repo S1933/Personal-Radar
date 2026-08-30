@@ -19,7 +19,7 @@ type Store struct {
 func New(d *db.DB) *Store { return &Store{db: d} }
 
 // ErrNotFound is returned by single-row mutations (MarkRead, MarkUnread,
-// HardDelete) when the target id does not exist. The web API maps it to 404.
+// MarkLiked) when the target id does not exist. The web API maps it to 404.
 var ErrNotFound = errors.New("not found")
 
 // InsertItem stores a normalized item. Returns the item id and true when the
@@ -403,23 +403,6 @@ func (s *Store) MarkUnliked(ctx context.Context, id int64) error {
 func (s *Store) setLikedFlag(ctx context.Context, id int64, v bool) error {
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE items SET is_liked = $1 WHERE id = $2`, v, id)
-	if err != nil {
-		return err
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return ErrNotFound
-	}
-	return nil
-}
-
-// HardDelete removes an item by id. CASCADE wipes scores / feedback /
-// item_sources. Returns ErrNotFound when the id does not exist.
-func (s *Store) HardDelete(ctx context.Context, id int64) error {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM items WHERE id = $1`, id)
 	if err != nil {
 		return err
 	}

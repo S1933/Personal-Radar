@@ -161,8 +161,6 @@ func (s *Server) handleItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch {
-	case r.Method == http.MethodDelete && action == "":
-		s.dispatchDelete(w, r, id)
 	case r.Method == http.MethodPost && action == "read":
 		s.dispatchSetRead(w, r, id, true)
 	case r.Method == http.MethodPost && action == "unread":
@@ -208,19 +206,6 @@ func (s *Server) dispatchLike(w http.ResponseWriter, r *http.Request, id int64, 
 		s.cfg.OnLike(r.Context(), id, liked)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"id": id, "is_liked": liked})
-}
-
-func (s *Server) dispatchDelete(w http.ResponseWriter, r *http.Request, id int64) {
-	if err := s.store.HardDelete(r.Context(), id); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not found")
-			return
-		}
-		s.log.Error("hard delete", "id", id, "error", err)
-		writeError(w, http.StatusInternalServerError, "database error")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"deleted": id})
 }
 
 func (s *Server) dispatchSetRead(w http.ResponseWriter, r *http.Request, id int64, v bool) {

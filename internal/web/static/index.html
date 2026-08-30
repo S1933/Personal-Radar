@@ -194,8 +194,6 @@
     .actions button:active { background: var(--panel-2); }
     .actions button.like { color: var(--accent); border-color: rgba(79,143,247,0.35); }
     .actions button.liked { color: #e5484d; border-color: rgba(229,72,77,0.45); }
-    .actions .delete { color: #8a4a4d; }
-    .actions .delete:active { color: var(--danger); }
 
     .empty { text-align: center; color: var(--muted); padding: 70px 20px; font-size: 14px; }
     .empty small { display: block; margin-top: 6px; color: #5d6672; }
@@ -330,7 +328,6 @@
             ${b.is_liked
               ? `<button class="liked" data-action="unlike" data-id="${b.id}">♥ Liké</button>`
               : `<button class="like" data-action="like" data-id="${b.id}">♡ Like</button>`}
-            <button class="delete" data-action="delete" data-id="${b.id}">✕ Supprimer</button>
           </div>
         </div>
       `;
@@ -468,17 +465,11 @@
       if (btn) {
         const id = btn.dataset.id;
         const action = btn.dataset.action;
-        if (action === "delete" && !confirm("Supprimer définitivement ?")) return;
         btn.disabled = true;
         try {
-          if (action === "delete") {
-            await fetchJSON(`/api/bookmarks/${id}`, { method: "DELETE" });
-            toast("Supprimé");
-          } else {
-            // like / unlike — the server also feeds personalization prefs
-            await fetchJSON(`/api/bookmarks/${id}/${action}`, { method: "POST" });
-            toast(action === "like" ? "♥ Ajouté à vos préférences" : "Like retiré");
-          }
+          // like / unlike — the server also feeds personalization prefs
+          await fetchJSON(`/api/bookmarks/${id}/${action}`, { method: "POST" });
+          toast(action === "like" ? "♥ Ajouté à vos préférences" : "Like retiré");
           load();
         } catch (err) {
           btn.disabled = false;
