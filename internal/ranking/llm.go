@@ -11,6 +11,7 @@ import (
 
 	"github.com/S1933/personal-radar/internal/config"
 	"github.com/S1933/personal-radar/internal/store"
+	"github.com/S1933/personal-radar/internal/textutil"
 )
 
 // llmScorer calls an OpenAI-compatible chat endpoint to produce the
@@ -107,14 +108,7 @@ func buildRankPrompt(it store.ScoredItem) string {
 	}
 	return fmt.Sprintf(
 		"Title: %s\nSource: %s%s\nContent: %s",
-		it.Title, it.Source, engagement, truncate(it.Content, 1200))
-}
-
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "..."
+		it.Title, it.Source, engagement, textutil.Truncate(it.Content, 1200, "…"))
 }
 
 func weightedScore(rel, imp, nov, act, pers float64) float64 {

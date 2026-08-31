@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/S1933/personal-radar/internal/config"
+	"github.com/S1933/personal-radar/internal/textutil"
 )
 
 // synthesizer calls an OpenAI-compatible chat endpoint to generate a short
@@ -35,7 +36,7 @@ func newSynthesizer(cfg config.ModelsConfig) *synthesizer {
 func (s *synthesizer) Rationale(ctx context.Context, title, content, source string) (string, error) {
 	prompt := fmt.Sprintf(
 		"Source: %s\nTitre: %s\nExtrait: %s\n\nEn une seule phrase concise (max 140 caractères), en français, explique pourquoi cet item intéresse un ingénieur backend senior passionné par les agents IA, Go et l'outillage développeur.",
-		source, title, truncate(content, 600))
+		source, title, textutil.Truncate(content, 600, "…"))
 
 	body, err := json.Marshal(map[string]any{
 		"model": s.model,
@@ -96,17 +97,10 @@ func (s *synthesizer) Rationale(ctx context.Context, title, content, source stri
 func cleanRationale(s string) string {
 	s = stripQuotes(s)
 	s = trimNewlines(s)
-	if len(s) > 160 {
-		s = s[:157] + "..."
-	}
+	// Cap at 160 runes (not bytes): the previous s[:157] + "..." cut a
+	// French accent in half and produced U+FFFD in the dashboard.
+	s = textutil.Truncate(s, 160, "…")
 	return s
-}
-
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "..."
 }
 
 func stripQuotes(s string) string {

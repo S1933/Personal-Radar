@@ -15,6 +15,7 @@ import (
 
 	"github.com/S1933/personal-radar/internal/config"
 	"github.com/S1933/personal-radar/internal/logging"
+	"github.com/S1933/personal-radar/internal/textutil"
 )
 
 // Client talks to the Telegram Bot API: long-polling updates + sendMessage.
@@ -167,9 +168,8 @@ func splitMessage(s string, max int) []string {
 	for _, line := range strings.Split(s, "\n") {
 		if len(line) > max {
 			// Pathological single line (e.g. one giant URL): cut on
-			// a rune boundary. The T7 textutil.Truncate will replace
-			// this once that package lands.
-			line = truncateRunes(line, max/4, "…")
+			// a rune boundary so the chunk is still valid UTF-8.
+			line = textutil.Truncate(line, max/4, "…")
 		}
 		if buf.Len()+len(line)+1 > max {
 			flush()
@@ -181,23 +181,6 @@ func splitMessage(s string, max int) []string {
 	}
 	flush()
 	return out
-}
-
-// truncateRunes is a UTF-8-safe cut kept local to the telegram package
-// until the shared textutil package lands in T7. Ranging over a string
-// yields rune start offsets, so s[:i] is always a valid cut.
-func truncateRunes(s string, n int, suffix string) string {
-	if n <= 0 {
-		return suffix
-	}
-	count := 0
-	for i := range s {
-		if count == n {
-			return s[:i] + suffix
-		}
-		count++
-	}
-	return s
 }
 
 // RegisterHandler attaches a command handler.

@@ -21,6 +21,7 @@ import (
 	"github.com/S1933/personal-radar/internal/logging"
 	"github.com/S1933/personal-radar/internal/store"
 	"github.com/S1933/personal-radar/internal/summary"
+	"github.com/S1933/personal-radar/internal/textutil"
 )
 
 //go:embed static
@@ -402,21 +403,14 @@ func writeSummary(w http.ResponseWriter, id int64, title, stored string) {
 	writeJSON(w, http.StatusOK, map[string]any{"id": id, "title": title, "points": points, "summary": stored, "cached": true})
 }
 
-// excerpt returns the first n bytes of s on a word boundary, cleaned of
-// HTML tags and collapsed whitespace, with an ellipsis.
+// excerpt returns the first n runes of s on a word boundary, cleaned
+// of HTML tags and collapsed whitespace, with an ellipsis. The cut
+// used to be byte-based; switching to runes is what T7 calls out
+// (French content was systematically more truncated than English at
+// equal budget).
 func excerpt(s string, n int) string {
-	// Drop common HTML tags from RSS/Reddit content.
 	s = stripTags(s)
-	s = strings.Join(strings.Fields(s), " ")
-	if len(s) <= n {
-		return s
-	}
-	cut := s[:n]
-	last := strings.LastIndex(cut, " ")
-	if last > n/2 {
-		cut = cut[:last]
-	}
-	return cut + "…"
+	return textutil.TruncateWords(textutil.CollapseWhitespace(s), n, "…")
 }
 
 // stripTags removes HTML tags (content stored from RSS feeds often

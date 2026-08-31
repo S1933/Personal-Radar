@@ -4,7 +4,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"unicode/utf8"
 
 	"github.com/S1933/personal-radar/internal/config"
 )
@@ -85,15 +84,6 @@ func TestSplitMessage(t *testing.T) {
 			}
 		}
 	})
-}
-
-func TestTruncateRunes(t *testing.T) {
-	// Pathological case: one line longer than max. splitMessage routes
-	// it through truncateRunes; we check the cut is UTF-8 valid.
-	out := truncateRunes("éèàùç éèàùç éèàùç", 3, "…")
-	if !utf8.ValidString(out) {
-		t.Fatalf("truncateRunes a produit de l'UTF-8 invalide: %q", out)
-	}
 }
 
 func TestParse(t *testing.T) {
