@@ -184,8 +184,15 @@ type multiFetcher struct {
 }
 
 func (m *multiFetcher) Get(ctx context.Context, url, etag, lastModified string) (*FetchResult, error) {
+	// Match by URL, not by feed name. The previous version used
+	// strings.Contains(url, name), which collided because the name
+	// "ok" is a substring of the URL "https://broken.example/feed"
+	// (the substring "ok" appears in "broken"). The collision was
+	// only triggered by some map-iteration orderings — in
+	// particular, the go -race runtime orders maps differently
+	// enough to expose it. CI failed with 4 items instead of 2.
 	for name, f := range m.feeds {
-		if strings.Contains(url, name) {
+		if strings.Contains(url, name+".") || strings.HasSuffix(url, "/"+name) {
 			return f.Get(ctx, url, etag, lastModified)
 		}
 	}
