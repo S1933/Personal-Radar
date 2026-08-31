@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"time"
 )
 
@@ -51,13 +52,13 @@ func (s *Scheduler) loop(ctx context.Context, j job) {
 	if j.spec.Every > 0 {
 		t := time.NewTicker(j.spec.Every)
 		defer t.Stop()
-		j.spec.Run(ctx) // immediate first run
+		s.runJob(ctx, j) // immediate first run
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-t.C:
-				j.spec.Run(ctx)
+				s.runJob(ctx, j)
 			}
 		}
 	}
@@ -79,9 +80,27 @@ func (s *Scheduler) loop(ctx context.Context, j job) {
 			timer.Stop()
 			return
 		case <-timer.C:
-			j.spec.Run(ctx)
+			s.runJob(ctx, j)
 		}
 	}
+}
+
+// runJob executes a job's function, converting a panic into a logged
+// warning. Without this, a nil map write in any collector takes down
+// the scheduler, the Telegram listener and the dashboard with it —
+// and Docker's restart loop hides the crash in a cycle of mysterious
+// restarts. With this, the offending job is logged once and the
+// goroutine continues to its next tick.
+func (s *Scheduler) runJob(ctx context.Context, j job) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.log.Warn("job panicked",
+				"job", j.name,
+				"panic", fmt.Sprint(r),
+				"stack", string(debug.Stack()))
+		}
+	}()
+	j.spec.Run(ctx)
 }
 
 func nextDaily(hhmm string, loc *time.Location) (time.Time, error) {
