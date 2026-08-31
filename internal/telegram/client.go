@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/S1933/personal-radar/internal/config"
@@ -18,10 +19,12 @@ import (
 
 // Client talks to the Telegram Bot API: long-polling updates + sendMessage.
 type Client struct {
-	cfg      config.TelegramConfig
-	log      *logging.Logger
-	client   *http.Client
-	handlers map[string]Handler
+	cfg              config.TelegramConfig
+	log              *logging.Logger
+	client           *http.Client
+	handlers         map[string]Handler
+	mu               sync.Mutex
+	seenUnauthorized map[int64]bool
 }
 
 // Handler processes a command or reaction; returns the reply text.
@@ -43,7 +46,39 @@ func NewClient(cfg config.TelegramConfig, log *logging.Logger) (*Client, error) 
 	}
 	cfg.AdminChatID = firstNonEmpty(os.Getenv("TELEGRAM_CHAT_ID"), cfg.AdminChatID)
 	cfg.ChatID = firstNonEmpty(cfg.ChatID, cfg.AdminChatID)
+	// Without a chat id the bot would silently accept any sender that
+	// finds @PersoRadarBot. Failing loudly at startup is better than a
+	// chat that mysteriously never replies.
+	if cfg.ChatID == "" && cfg.AdminChatID == "" {
+		return nil, fmt.Errorf("TELEGRAM_CHAT_ID not set: refusing to run an unrestricted bot")
+	}
 	return &Client{cfg: cfg, log: log, client: &http.Client{Timeout: 65 * time.Second}}, nil
+}
+
+// allowed reports whether an incoming chat may drive the bot. Without this
+// check, anyone who finds @PersoRadarBot could trigger LLM calls (/deepdive,
+// /today) and disk writes (/save) at the owner's expense.
+func (c *Client) allowed(chatID int64) bool {
+	id := strconv.FormatInt(chatID, 10)
+	return (c.cfg.ChatID != "" && id == c.cfg.ChatID) ||
+		(c.cfg.AdminChatID != "" && id == c.cfg.AdminChatID)
+}
+
+// logUnauthorized records a Warn the first time a given unknown chat
+// reaches us. Subsequent messages from the same chat are dropped silently:
+// an unexpected sender is worth noticing, but a spam loop must not flood
+// the logs.
+func (c *Client) logUnauthorized(chatID int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.seenUnauthorized == nil {
+		c.seenUnauthorized = map[int64]bool{}
+	}
+	if c.seenUnauthorized[chatID] {
+		return
+	}
+	c.seenUnauthorized[chatID] = true
+	c.log.Warn("ignoring message from unauthorized chat", "chat_id", chatID)
 }
 
 func firstNonEmpty(vals ...string) string {
@@ -149,6 +184,10 @@ func (c *Client) Listen(ctx context.Context, handlers map[string]Handler) error 
 		for _, u := range upd.Result {
 			offset = int(u.UpdateID) + 1
 			if u.Message == nil || strings.TrimSpace(u.Message.Text) == "" {
+				continue
+			}
+			if !c.allowed(u.Message.Chat.ID) {
+				c.logUnauthorized(u.Message.Chat.ID)
 				continue
 			}
 			cmd := parse(u.Message.Text)
