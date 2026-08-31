@@ -91,6 +91,17 @@ func New(ctx context.Context, cfg *config.Config, log *logging.Logger) (*App, er
 		Scheduler: scheduler.New(log.With("sub", "scheduler")),
 		DeepDive:  NewDeepDive(cfg.Models),
 	}
+
+	// A misconfigured vault makes /save write into the container's
+	// ephemeral filesystem: the user gets "archivé" and everything
+	// vanishes on restart. A boot-time warning beats a quiet data loss.
+	if cfg.Obsidian.Enabled && cfg.Obsidian.VaultPath != "" {
+		if fi, err := os.Stat(cfg.Obsidian.VaultPath); err != nil || !fi.IsDir() {
+			log.Warn("obsidian vault path is not a directory — /save will write to ephemeral storage",
+				"path", cfg.Obsidian.VaultPath, "error", err)
+		}
+	}
+
 	return app, nil
 }
 

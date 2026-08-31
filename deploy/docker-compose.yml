@@ -37,6 +37,10 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       X_AUTH_TOKEN: ${X_AUTH_TOKEN}
       X_CT0: ${X_CT0}
+      # The YAML carries the host path; inside the container the vault is
+      # mounted at /data/obsidian. Without this override, /save wrote into
+      # the container's ephemeral filesystem.
+      RADAR_OBSIDIAN_VAULT: /data/obsidian
       # Bind the bookmark dashboard on all interfaces inside the container
       # so the host can reach it via the bridge IP. The published port below
       # also limits exposure to 127.0.0.1.
@@ -55,4 +59,3 @@ services:
 
 volumes:
   pgdata:
-  radar-obsidian:

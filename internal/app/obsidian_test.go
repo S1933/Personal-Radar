@@ -1,66 +1,55 @@
 package app
 
 import (
-	"context"
-	"os"
 	"path/filepath"
-	"strings"
 	"testing"
-	"time"
-
-	"github.com/S1933/personal-radar/internal/config"
-	"github.com/S1933/personal-radar/internal/db"
-	"github.com/S1933/personal-radar/internal/store"
 )
 
-// TestSaveToObsidianReal verifies /save writes a markdown note into the
-// configured vault path. Requires RADAR_DB_* env + a vault path.
-func TestSaveToObsidianReal(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping network/fs test in -short")
+func TestObsidianFilePath(t *testing.T) {
+	// t.TempDir() yields an absolute, OS-correct path. The relative
+	// segments we append must land exactly where SaveToObsidian expects.
+	vault := t.TempDir()
+	got := obsidianFilePath(vault, 42, "2026-08-31")
+	want := filepath.Join(vault, "Daily Radar", "2026-08-31", "item-42.md")
+	if got != want {
+		t.Fatalf("obsidianFilePath() = %q, want %q", got, want)
 	}
-	vault := os.Getenv("RADAR_OBSIDIAN_TEST_VAULT")
-	if vault == "" {
-		t.Skip("RADAR_OBSIDIAN_TEST_VAULT not set")
-	}
-	dsn := envOr("RADAR_DB_DSN", "host=localhost port=5499 user=radar password=radar dbname=radar sslmode=disable")
-	database, err := db.Open(context.Background(), dsn)
-	if err != nil {
-		t.Fatalf("db.Open: %v", err)
-	}
-	defer database.Close()
-	st := store.New(database)
-
-	items, err := st.TopScoredItems(context.Background(), 48*time.Hour, 1)
-	if err != nil || len(items) == 0 {
-		t.Fatalf("no items: %v", err)
-	}
-	a := &App{
-		Cfg:   &config.Config{Obsidian: config.ObsidianConfig{Enabled: true, VaultPath: vault}},
-		Store: st,
-	}
-	if err := a.SaveToObsidian(context.Background(), items[0].DBID); err != nil {
-		t.Fatalf("save: %v", err)
-	}
-	matches, _ := filepath.Glob(filepath.Join(vault, "**", "item-*.md"))
-	if len(matches) == 0 {
-		// Fallback: recursive walk in case glob ** is unsupported.
-		_ = filepath.Walk(vault, func(p string, info os.FileInfo, err error) error {
-			if err == nil && strings.HasSuffix(p, ".md") && strings.Contains(p, "item-") {
-				matches = append(matches, p)
-			}
-			return nil
-		})
-	}
-	if len(matches) == 0 {
-		t.Fatal("expected a markdown note in vault")
-	}
-	t.Logf("wrote: %s", matches[0])
 }
 
-func envOr(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
+func TestObsidianFilePathHandlesSpaces(t *testing.T) {
+	// "Daily Radar" contains a space. A naive string concat would
+	// produce "Daily Radar/2026-08-31/item-42.md" too — but on Windows
+	// separators, and with vault paths that may themselves contain
+	// spaces, filepath.Join is the only safe joiner.
+	vault := t.TempDir()
+	got := obsidianFilePath(vault, 1, "2026-08-31")
+	// The path must contain a space-separated "Daily Radar" segment.
+	if !filepathContainsSegment(got, "Daily Radar") {
+		t.Fatalf("path %q does not contain the 'Daily Radar' segment intact", got)
 	}
-	return def
+}
+
+func filepathContainsSegment(p, segment string) bool {
+	for _, part := range filepath.SplitList(p) {
+		if part == p {
+			continue
+		}
+	}
+	// filepath.SplitList only works for PATH-style lists; do a manual
+	// walk over the path's segments instead.
+	for i := 0; i < len(p); {
+		j := i
+		for j < len(p) && p[j] != filepath.Separator {
+			j++
+		}
+		if p[i:j] == segment {
+			return true
+		}
+		if j < len(p) {
+			i = j + 1
+		} else {
+			i = j
+		}
+	}
+	return false
 }

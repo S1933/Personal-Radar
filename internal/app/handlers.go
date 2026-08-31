@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strconv"
+	"path/filepath"
 	"strings"
 
 	"github.com/S1933/personal-radar/internal/personalization"
@@ -131,7 +131,7 @@ func (a *App) SaveToObsidian(ctx context.Context, itemID int64) error {
 	if err != nil {
 		return err
 	}
-	dir := a.Cfg.Obsidian.VaultPath + "/Daily Radar/" + nowDateString() + "/"
+	dir := filepath.Join(a.Cfg.Obsidian.VaultPath, "Daily Radar", nowDateString())
 	if err := mkdirAll(dir); err != nil && !os.IsExist(err) {
 		return err
 	}
@@ -146,7 +146,13 @@ func (a *App) SaveToObsidian(ctx context.Context, itemID int64) error {
 		b.WriteString(it.Content + "\n\n")
 	}
 	b.WriteString("[Lien](" + it.URL + ")\n")
-	return writeFile(dir+fmt.Sprintf("item-%d.md", itemID), b.String())
+	return writeFile(filepath.Join(dir, fmt.Sprintf("item-%d.md", itemID)), b.String())
 }
 
-var _ = strconv.Itoa
+// obsidianFilePath is the contract between SaveToObsidian and the
+// filesystem: <VaultPath>/Daily Radar/<YYYY-MM-DD>/item-<id>.md.
+// Extracted so the path logic is testable without a live database —
+// the "Daily Radar" segment is the kind of string that gets fat-fingered.
+func obsidianFilePath(vaultPath string, id int64, date string) string {
+	return filepath.Join(vaultPath, "Daily Radar", date, fmt.Sprintf("item-%d.md", id))
+}

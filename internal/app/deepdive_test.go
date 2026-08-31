@@ -20,7 +20,10 @@ func TestDeepDiveReal(t *testing.T) {
 	if key == "" || base == "" {
 		t.Skip("OPENAI_API_KEY / OPENAI_BASE_URL not set")
 	}
-	dsn := envOr("RADAR_DB_DSN", "host=localhost port=5432 user=radar password=radar dbname=radar sslmode=disable")
+	dsn := os.Getenv("RADAR_DB_DSN")
+	if dsn == "" {
+		dsn = "host=localhost port=5432 user=radar password=radar dbname=radar sslmode=disable"
+	}
 	database, err := db.Open(context.Background(), dsn)
 	if err != nil {
 		t.Fatalf("db.Open: %v", err)

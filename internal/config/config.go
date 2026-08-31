@@ -173,6 +173,7 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("parse config %s: %w", path, err)
 	}
 	cfg.defaults()
+	applyEnvOverrides(cfg)
 	// Secrets come from the environment (never from YAML), matching the
 	// database credential pattern. OPENAI_API_KEY feeds the LLM stage.
 	if cfg.Models.APIKey == "" {
@@ -195,6 +196,17 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.X.BearerToken = os.Getenv("X_BEARER_TOKEN")
 	}
 	return cfg, nil
+}
+
+// Override host paths at runtime via env vars. The YAML is mounted
+// read-only and carries operator-specific paths; the container layout
+// differs (e.g. /data/obsidian is a bind-mounted vault). Without this
+// override, /save would write into the container's ephemeral filesystem
+// and disappear on the next restart.
+func applyEnvOverrides(cfg *Config) {
+	if v := envOr("RADAR_OBSIDIAN_VAULT", ""); v != "" {
+		cfg.Obsidian.VaultPath = v
+	}
 }
 
 func (c *Config) defaults() {
