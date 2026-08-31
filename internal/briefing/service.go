@@ -57,6 +57,19 @@ func SendOption(send bool) context.Context {
 // Generate builds the briefing over the last 24h. When the ctx carries
 // SendOption(true), the briefing is also delivered via Telegram.
 func (s *Service) Generate(ctx context.Context, opts ...context.Context) (string, error) {
+	// T13: record the run for observability. items_collected counts
+	// what made it into the message, items_failed is 0 for the
+	// briefing (errors surface as the returned err below).
+	start := time.Now()
+	var runErr error
+	var selectedCount int
+	defer func() {
+		if err := s.store.SaveRun(ctx, "briefing", "", start, time.Now(),
+			selectedCount, 0, runErrMsg(runErr)); err != nil {
+			s.log.Warn("save run", "error", err)
+		}
+	}()
+
 	// Rank anything pending first so the selection is fresh.
 	// UnscoredItems is capped (150/query), so loop until the queue is
 	// drained — otherwise a large backlog would take several briefings
@@ -75,10 +88,12 @@ func (s *Service) Generate(ctx context.Context, opts ...context.Context) (string
 
 	items, err := s.store.TopScoredItems(ctx, 24*time.Hour, s.opts.MaxItems*3)
 	if err != nil {
-		return "", fmt.Errorf("top items: %w", err)
+		runErr = fmt.Errorf("top items: %w", err)
+		return "", runErr
 	}
 	if len(items) == 0 {
-		return "", fmt.Errorf("no items in the last 24h")
+		runErr = fmt.Errorf("no items in the last 24h")
+		return "", runErr
 	}
 
 	// Source quota: a pure top-N ranking lets one source crowd out the
@@ -93,6 +108,7 @@ func (s *Service) Generate(ctx context.Context, opts ...context.Context) (string
 	// message — the comment claimed otherwise. Hoisting the dedup
 	// here makes the bookmarked set exactly what was sent.
 	selected = dedupeByTitle(selected)
+	selectedCount = len(selected)
 
 	trends := s.detectTrends(items)
 
@@ -126,6 +142,15 @@ func (s *Service) Generate(ctx context.Context, opts ...context.Context) (string
 		}
 	}
 	return content, nil
+}
+
+// runErrMsg returns the error message for the runs table, or "" on
+// success. Centralised so the defer above stays compact.
+func runErrMsg(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 // applySourceQuota diversifies a ranked list so no single source can
