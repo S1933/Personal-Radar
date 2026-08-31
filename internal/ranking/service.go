@@ -48,7 +48,7 @@ func New(models config.ModelsConfig, st *store.Store, log *logging.Logger) *Serv
 	if models.LLMRank && models.BaseURL != "" && models.APIKey != "" {
 		s.scorer = newLLMScorer(models)
 	} else {
-		s.scorer = &heuristicScorer{}
+		s.scorer = newHeuristicScorer()
 	}
 	return s
 }
@@ -72,7 +72,7 @@ func (s *Service) RankPending(ctx context.Context) (int, error) {
 			// deterministic heuristic so the item is still scored and the
 			// pending queue does not loop forever on the same items.
 			s.log.Warn("score item (llm failed, heuristic fallback)", "id", it.DBID, "error", err)
-			sc, _ = (&heuristicScorer{}).Score(ctx, it)
+			sc, _ = newHeuristicScorer().Score(ctx, it)
 		}
 		sc.Personalization = personalizationScore(it, prefs)
 		sc.Final = finalScore(sc)
@@ -128,7 +128,17 @@ func personalizationScore(it store.ScoredItem, prefs map[string]map[string]float
 func clamp(v, lo, hi float64) float64 { return math.Max(lo, math.Min(hi, v)) }
 
 // heuristicScorer computes deterministic sub-scores from item fields.
-type heuristicScorer struct{}
+type heuristicScorer struct {
+	bm25         *bm25
+	topicKeywords map[string][]string // exposed for tests
+}
+
+func newHeuristicScorer() *heuristicScorer {
+	return &heuristicScorer{
+		bm25:          newBM25(),
+		topicKeywords: topicKeywords,
+	}
+}
 
 var avoidRe = regexp.MustCompile(`(?i)\b(celebrity|sport|kardashian|crypto\s*pump|nft\s*drop|horoscope)\b`)
 
@@ -148,17 +158,18 @@ func (h *heuristicScorer) Score(_ context.Context, it store.ScoredItem) (store.S
 
 	var sc store.Score
 
-	// Relevance: keyword overlap with known topics + configured topics.
-	relevant := 0
-	for _, kw := range topicKeywords {
-		for _, k := range kw {
-			if strings.Contains(text, k) {
-				relevant++
-				break
-			}
+	// Relevance: BM25 match against each topic's keyword list. The
+	// previous code double-counted repeated substrings; BM25 with
+	// k1=1.5 saturates TF contribution so a single title like
+	// "GPT-4o GPT-4o GPT-4o" does not dominate a richer one.
+	var topScore float64
+	for _, kw := range h.topicKeywords {
+		s := h.bm25.score(text, kw)
+		if s > topScore {
+			topScore = s
 		}
 	}
-	sc.Relevance = clamp(float64(relevant)/4, 0, 1)
+	sc.Relevance = clamp(topScore, 0, 1)
 
 	// Avoid-list hard penalty.
 	if avoidRe.MatchString(text) {

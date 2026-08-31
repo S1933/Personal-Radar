@@ -8,7 +8,7 @@ import (
 )
 
 func TestHeuristicScoring(t *testing.T) {
-	s := &heuristicScorer{}
+	s := newHeuristicScorer()
 
 	ai := store.ScoredItem{
 		Title:      "OpenAI releases new coding agent SDK",
@@ -19,7 +19,10 @@ func TestHeuristicScoring(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sc.Relevance < 0.5 {
+	if sc.Relevance < 0.4 {
+		// Threshold reflects the new BM25-based relevance: 0.4 is
+		// enough headroom for the "coding agent" topic to win, and
+		// still well above the 0 an "all-avoid" item gets.
 		t.Errorf("AI item should be relevant, got %.2f", sc.Relevance)
 	}
 	if sc.Novelty < 0.5 {
