@@ -110,10 +110,10 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 	}
 	filter := store.BookmarkFilter(r.URL.Query().Get("filter"))
 	switch filter {
-	case store.BookmarkUnread, store.BookmarkRead, store.BookmarkLiked, store.BookmarkAll, "":
+	case store.BookmarkUnread, store.BookmarkRead, store.BookmarkLiked, store.BookmarkPinned, store.BookmarkAll, "":
 		// ok
 	default:
-		writeError(w, http.StatusBadRequest, `filter must be "unread", "read", "liked", or "all"`)
+		writeError(w, http.StatusBadRequest, `filter must be "unread", "read", "liked", "pinned", or "all"`)
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
@@ -169,6 +169,10 @@ func (s *Server) handleItem(w http.ResponseWriter, r *http.Request) {
 		s.dispatchLike(w, r, id, true)
 	case r.Method == http.MethodPost && action == "unlike":
 		s.dispatchLike(w, r, id, false)
+	case r.Method == http.MethodPost && action == "pin":
+		s.dispatchPin(w, r, id, true)
+	case r.Method == http.MethodPost && action == "unpin":
+		s.dispatchPin(w, r, id, false)
 	case r.Method == http.MethodGet && action == "":
 		s.dispatchGet(w, r, id)
 	default:
@@ -206,6 +210,29 @@ func (s *Server) dispatchLike(w http.ResponseWriter, r *http.Request, id int64, 
 		s.cfg.OnLike(r.Context(), id, liked)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"id": id, "is_liked": liked})
+}
+
+// dispatchPin sets/clears the pinned flag. Pinning marks the item as
+// liked+read in the same transaction (server-side, so the UI stays in
+// sync even if it only sends "pin"). Unpinning leaves liked+read intact
+// — the item goes back to the "liked" view.
+func (s *Server) dispatchPin(w http.ResponseWriter, r *http.Request, id int64, pinned bool) {
+	var err error
+	if pinned {
+		err = s.store.MarkPinned(r.Context(), id)
+	} else {
+		err = s.store.MarkUnpinned(r.Context(), id)
+	}
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+		s.log.Error("set pinned flag", "id", id, "value", pinned, "error", err)
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"id": id, "is_pinned": pinned})
 }
 
 func (s *Server) dispatchSetRead(w http.ResponseWriter, r *http.Request, id int64, v bool) {

@@ -193,6 +193,8 @@
     .actions button:active { background: var(--panel-2); }
     .actions button.like { color: var(--accent); border-color: rgba(79,143,247,0.35); }
     .actions button.liked { color: #e5484d; border-color: rgba(229,72,77,0.45); }
+    .actions button.pin { color: #f0b429; border-color: rgba(240,180,41,0.45); }
+    .actions button.pinned { color: #d9972a; border-color: rgba(240,180,41,0.6); background: rgba(240,180,41,0.08); }
 
     .empty { text-align: center; color: var(--muted); padding: 70px 20px; font-size: 14px; }
     .empty small { display: block; margin-top: 6px; color: #5d6672; }
@@ -237,8 +239,8 @@
     </div>
     <div class="filters">
       <button data-filter="unread" class="active">Non lus</button>
-      <button data-filter="liked">Likés</button>
-      <button data-filter="all">Tous</button>
+      <button data-filter="liked">Like</button>
+      <button data-filter="pinned">Pin</button>
     </div>
     <div class="tagbar" id="tagbar" hidden></div>
   </header>
@@ -301,6 +303,23 @@
       }[c]));
     }
 
+    // The action button follows the Trello-like workflow:
+    //   unread view → ♡ Like (interest)
+    //   liked view  → 📌 Pin (analysed, keep aside)
+    //   pinned view → 📌 Épinglé (click to un-pin, back to liked view)
+    function actionButton(b) {
+      if (currentFilter === "liked") {
+        return `<button class="pin" data-action="pin" data-id="${b.id}" title="Garder de côté après analyse">📌 Pin</button>`;
+      }
+      if (currentFilter === "pinned") {
+        return `<button class="pinned" data-action="unpin" data-id="${b.id}" title="Retirer du pin">📌 Épinglé</button>`;
+      }
+      // unread (and any other view): like toggle
+      return b.is_liked
+        ? `<button class="liked" data-action="unlike" data-id="${b.id}">♥ Liké</button>`
+        : `<button class="like" data-action="like" data-id="${b.id}">♡ Like</button>`;
+    }
+
     function renderItem(b) {
       const icon = SOURCE_ICON[b.source] || "•";
       const srcLabel = SOURCE_LABEL[b.source] || b.source;
@@ -328,9 +347,7 @@
             <span>${fmtTime(b.collected_at)}</span>
           </div>
           <div class="actions">
-            ${b.is_liked
-              ? `<button class="liked" data-action="unlike" data-id="${b.id}">♥ Liké</button>`
-              : `<button class="like" data-action="like" data-id="${b.id}">♡ Like</button>`}
+            ${actionButton(b)}
           </div>
         </div>
       `;
@@ -386,28 +403,28 @@
 
     let lastItems = []; // items of the last load(), used to patch tags/counts locally
 
-    // Optimistic like/unlike: patch the card in place instead of reloading
+    // Optimistic like/pin/unpin: patch the card in place instead of reloading
     // the whole list (which re-fetches summaries and makes the page jump).
-    function applyLikeLocal(id, liked) {
-      // find the card by its like button
+    function applyActionLocal(id, action) {
       const btn = document.querySelector(`button[data-action][data-id="${id}"]`);
       const cardEl = btn ? btn.closest(".card") : null;
       if (!cardEl) { load(); return; }
       const item = lastItems.find(b => b.id === id);
-      // 1) update the like button + card state
-      cardEl.classList.toggle("liked", liked);
-      cardEl.dataset.read = "1";
-      const oldBtn = cardEl.querySelector("button[data-action]");
-      if (oldBtn) {
-        oldBtn.classList.remove("like", "liked");
-        oldBtn.classList.add(liked ? "liked" : "like");
-        oldBtn.dataset.action = liked ? "unlike" : "like";
-        oldBtn.textContent = liked ? "♥ Liké" : "♡ Like";
+      if (item) {
+        if (action === "like") { item.is_liked = true; item.is_read = true; }
+        else if (action === "unlike") { item.is_liked = false; }
+        else if (action === "pin") { item.is_pinned = true; item.is_liked = true; item.is_read = true; }
+        else if (action === "unpin") { item.is_pinned = false; }
       }
-      // 2) like in the "unread" view removes the card (item becomes read);
-      //    unlike in the "liked" view removes it too. Animate the height so
-      //    the grid reflows smoothly instead of jumping.
-      const leaves = (currentFilter === "unread" && liked) || (currentFilter === "liked" && !liked);
+      // 2) an action can make the card leave the current view:
+      //    like in "unread" (becomes read), pin in "liked" (goes to pinned),
+      //    unpin in "pinned" (back to liked). Animate the height so the grid
+      //    reflows smoothly instead of jumping.
+      const leaves =
+        (currentFilter === "unread" && action === "like") ||
+        (currentFilter === "liked" && action === "pin") ||
+        (currentFilter === "pinned" && action === "unpin") ||
+        (currentFilter === "liked" && action === "unlike");
       if (leaves) {
         const h = cardEl.offsetHeight;
         cardEl.style.transition = "height 220ms ease, opacity 220ms ease, margin 220ms ease, padding 220ms ease";
@@ -438,8 +455,17 @@
           applyTagFilter();
         }, 240);
       } else {
+        // like/unlike in "unread" only toggles the button in place
+        const oldBtn = cardEl.querySelector("button[data-action]");
+        if (oldBtn && (action === "like" || action === "unlike")) {
+          cardEl.classList.toggle("liked", action === "like");
+          oldBtn.classList.remove("like", "liked");
+          oldBtn.classList.add(action === "like" ? "liked" : "like");
+          oldBtn.dataset.action = action === "like" ? "unlike" : "like";
+          oldBtn.textContent = action === "like" ? "♥ Liké" : "♡ Like";
+        }
         // like also marks as read (server does it); update the FAB if needed
-        if (liked && currentFilter === "all") {
+        if (currentFilter === "all") {
           const unreadLeft = lastItems.some(b => b.id !== id && !b.is_read);
           document.getElementById("readall").style.display = unreadLeft ? "" : "none";
         }
@@ -513,10 +539,13 @@
         const action = btn.dataset.action;
         btn.disabled = true;
         try {
-          // like / unlike — the server also feeds personalization prefs
+          // like / pin — the server also feeds personalization prefs
           await fetchJSON(`/api/bookmarks/${id}/${action}`, { method: "POST" });
-          toast(action === "like" ? "♥ Ajouté à vos préférences" : "Like retiré");
-          applyLikeLocal(id, action === "like");
+          if (action === "like") toast("♥ Ajouté à vos préférences");
+          else if (action === "unlike") toast("Like retiré");
+          else if (action === "pin") toast("📌 Épinglé après analyse");
+          else toast("📌 Pin retiré");
+          applyActionLocal(id, action);
         } catch (err) {
           btn.disabled = false;
           toast("Erreur : " + err.message);

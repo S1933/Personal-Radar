@@ -336,6 +336,7 @@ type Bookmark struct {
 	FinalScore   float64   `json:"final_score"`
 	IsRead       bool      `json:"is_read"`
 	IsLiked      bool      `json:"is_liked"`
+	IsPinned     bool      `json:"is_pinned"`
 }
 
 // MarkBookmarked flags the given item ids as bookmarked. Idempotent. Used by
@@ -416,6 +417,42 @@ func (s *Store) setLikedFlag(ctx context.Context, id int64, v bool) error {
 	return nil
 }
 
+// MarkPinned flags an item as pinned AND liked+read: pinning means the
+// item was analysed and kept aside, so it implies liking and reading.
+func (s *Store) MarkPinned(ctx context.Context, id int64) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE items SET is_pinned = TRUE, is_liked = TRUE, is_read = TRUE WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// MarkUnpinned clears only the pinned flag (liked+read stay, so the item
+// returns to the "liked" view).
+func (s *Store) MarkUnpinned(ctx context.Context, id int64) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE items SET is_pinned = FALSE WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // BookmarkFilter narrows ListBookmarks to a read state.
 type BookmarkFilter string
 
@@ -423,6 +460,7 @@ const (
 	BookmarkUnread BookmarkFilter = "unread"
 	BookmarkRead   BookmarkFilter = "read"
 	BookmarkLiked  BookmarkFilter = "liked"
+	BookmarkPinned BookmarkFilter = "pinned"
 	BookmarkAll    BookmarkFilter = "all"
 )
 
@@ -446,7 +484,9 @@ func (s *Store) ListBookmarks(ctx context.Context, filter BookmarkFilter, limit,
 	case BookmarkRead:
 		whereClause = "WHERE i.is_bookmarked = TRUE AND i.is_read = TRUE"
 	case BookmarkLiked:
-		whereClause = "WHERE i.is_bookmarked = TRUE AND i.is_liked = TRUE"
+		whereClause = "WHERE i.is_bookmarked = TRUE AND i.is_liked = TRUE AND i.is_pinned = FALSE"
+	case BookmarkPinned:
+		whereClause = "WHERE i.is_bookmarked = TRUE AND i.is_pinned = TRUE"
 	default: // BookmarkAll
 		whereClause = "WHERE i.is_bookmarked = TRUE"
 	}
@@ -461,7 +501,7 @@ func (s *Store) ListBookmarks(ctx context.Context, filter BookmarkFilter, limit,
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT i.id, i.source, i.title, i.url, i.canonical_url, i.author,
 		       i.published_at, i.collected_at, i.content, i.topics,
-		       COALESCE(s.final_score, 0), i.is_read, i.is_liked
+		       COALESCE(s.final_score, 0), i.is_read, i.is_liked, i.is_pinned
 		FROM items i
 		LEFT JOIN scores s ON s.item_id = i.id
 		`+whereClause+`
@@ -478,7 +518,7 @@ func (s *Store) ListBookmarks(ctx context.Context, filter BookmarkFilter, limit,
 		var published sql.NullTime
 		if err := rows.Scan(&b.DBID, &b.Source, &b.Title, &b.URL, &b.CanonicalURL,
 			&b.Author, &published, &b.CollectedAt, &b.Content, pqArray(&b.Topics),
-			&b.FinalScore, &b.IsRead, &b.IsLiked); err != nil {
+			&b.FinalScore, &b.IsRead, &b.IsLiked, &b.IsPinned); err != nil {
 			return nil, 0, err
 		}
 		if published.Valid {

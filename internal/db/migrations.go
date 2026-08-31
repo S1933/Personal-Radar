@@ -146,6 +146,18 @@ CREATE INDEX IF NOT EXISTS items_liked_idx
 ALTER TABLE items
     ADD COLUMN IF NOT EXISTS summary_title TEXT NOT NULL DEFAULT '';
 `,
+	// 006 — pin flag: a pinned item is one that was analysed and kept
+	// aside, distinct from a Like (interest). Workflow is Trello-like:
+	// unread -> like -> pin. Pinning implies liked+read so un-pinning
+	// returns the item to the "liked" view.
+	`
+ALTER TABLE items
+    ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE INDEX IF NOT EXISTS items_pinned_idx
+    ON items (collected_at DESC)
+    WHERE is_pinned = TRUE;
+`,
 }
 
 // Migrate applies pending migrations inside a transaction per migration.
