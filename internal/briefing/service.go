@@ -87,6 +87,13 @@ func (s *Service) Generate(ctx context.Context, opts ...context.Context) (string
 	// a Trello-style "one column is not allowed to eat the whole board".
 	selected := applySourceQuota(items, s.opts.MaxItems)
 
+	// Dedupe by title before ids are computed: ids was previously
+	// calculated before the dedup-by-title inside render(), so
+	// MarkBookmarked tagged items that were dropped from the
+	// message — the comment claimed otherwise. Hoisting the dedup
+	// here makes the bookmarked set exactly what was sent.
+	selected = dedupeByTitle(selected)
+
 	trends := s.detectTrends(items)
 
 	content := s.render(ctx, selected, trends)
@@ -137,7 +144,6 @@ func applySourceQuota(items []store.ScoredItem, max int) []store.ScoredItem {
 	for s := range count {
 		sources = append(sources, s)
 	}
-	sort.Strings(sources) // deterministic
 
 	bestOf := map[string][]store.ScoredItem{}
 	for _, s := range sources {
@@ -147,14 +153,40 @@ func applySourceQuota(items []store.ScoredItem, max int) []store.ScoredItem {
 		bestOf[it.Source] = append(bestOf[it.Source], it) // already score-ordered
 	}
 
+	// Sort sources by best score (descending) with alphabetical
+	// tiebreak. A tight max_items must not systematically favour
+	// whichever source sorts first alphabetically — the previous
+	// sort.Strings(sources) here did exactly that.
+	sort.SliceStable(sources, func(i, j int) bool {
+		bi, bj := bestOf[sources[i]], bestOf[sources[j]]
+		if len(bi) == 0 || len(bj) == 0 {
+			return len(bi) > len(bj)
+		}
+		if bi[0].Score.Final != bj[0].Score.Final {
+			return bi[0].Score.Final > bj[0].Score.Final
+		}
+		return sources[i] < sources[j]
+	})
+
 	taken := map[string]int{}
 	out := make([]store.ScoredItem, 0, max)
 
-	// Phase 1: guarantee the per-source minimum.
+	// Phase 1: guarantee the per-source minimum, but never exceed max.
+	// With many active sources, sum(minSeats) can exceed max; the
+	// ceiling must win, and the last batch must be truncated.
 	for _, s := range sources {
+		if len(out) >= max {
+			break
+		}
 		n := minSeats
 		if len(bestOf[s]) < n {
 			n = len(bestOf[s])
+		}
+		if len(out)+n > max {
+			n = max - len(out)
+		}
+		if n <= 0 {
+			continue
 		}
 		out = append(out, bestOf[s][:n]...)
 		bestOf[s] = bestOf[s][n:]
@@ -180,6 +212,25 @@ func applySourceQuota(items []store.ScoredItem, max int) []store.ScoredItem {
 		out = append(out, bestOf[bestSource][0])
 		bestOf[bestSource] = bestOf[bestSource][1:]
 		taken[bestSource]++
+	}
+	return out
+}
+
+// dedupeByTitle collapses items whose normalized titles are identical —
+// typically the same story surfaced by two collectors, or a tweet picked
+// up twice. The first occurrence wins, so the score ordering is
+// preserved. Hoisted from render() so the ids fed to MarkBookmarked
+// match what actually reaches the reader.
+func dedupeByTitle(items []store.ScoredItem) []store.ScoredItem {
+	seen := make(map[string]bool, len(items))
+	out := make([]store.ScoredItem, 0, len(items))
+	for _, it := range items {
+		key := normTitle(it.Title)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, it)
 	}
 	return out
 }
@@ -273,21 +324,11 @@ func (s *Service) render(ctx context.Context, items []store.ScoredItem, trends [
 		return b.String()
 	}
 
-	// De-duplicate by normalized title so the same story (e.g. a tweet
-	// surfaced twice by X) does not appear twice in the briefing.
-	seen := make(map[string]bool)
-	var deduped []store.ScoredItem
-	for _, it := range items {
-		key := normTitle(it.Title)
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		deduped = append(deduped, it)
-	}
-
+	// De-duplication by title now happens upstream (in Generate via
+	// dedupeByTitle) so the bookmarked ids match what reaches the
+	// reader. render() iterates the items as given.
 	b.WriteString("🔥 <b>À NE PAS MANQUER</b>\n\n")
-	for i, it := range deduped {
+	for i, it := range items {
 		icon := sourceIcon(it.Source)
 		// Both the URL and the title must be escaped: an unescaped "&"
 		// in a URL breaks the href, and a "_" or "*" in a title
