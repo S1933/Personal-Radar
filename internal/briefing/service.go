@@ -57,8 +57,19 @@ func SendOption(send bool) context.Context {
 // SendOption(true), the briefing is also delivered via Telegram.
 func (s *Service) Generate(ctx context.Context, opts ...context.Context) (string, error) {
 	// Rank anything pending first so the selection is fresh.
-	if _, err := s.ranker.RankPending(ctx); err != nil {
-		s.log.Warn("rank before briefing", "error", err)
+	// UnscoredItems is capped (150/query), so loop until the queue is
+	// drained — otherwise a large backlog would take several briefings
+	// to get scored and would never surface in the selection.
+	for i := 0; i < 5; i++ {
+		n, err := s.ranker.RankPending(ctx)
+		if err != nil {
+			s.log.Warn("rank before briefing", "error", err)
+			break
+		}
+		if n == 0 {
+			break
+		}
+		s.log.Info("ranked pending before briefing", "batch", i+1, "items", n)
 	}
 
 	items, err := s.store.TopScoredItems(ctx, 24*time.Hour, s.opts.MaxItems*3)
@@ -69,10 +80,11 @@ func (s *Service) Generate(ctx context.Context, opts ...context.Context) (string
 		return "", fmt.Errorf("no items in the last 24h")
 	}
 
-	selected := items
-	if len(selected) > s.opts.MaxItems {
-		selected = selected[:s.opts.MaxItems]
-	}
+	// Source quota: a pure top-N ranking lets one source crowd out the
+	// rest (a wall of long Reddit posts buries short X tweets even when
+	// they are viral). Ensure every active source keeps a seat — this is
+	// a Trello-style "one column is not allowed to eat the whole board".
+	selected := applySourceQuota(items, s.opts.MaxItems)
 
 	trends := s.detectTrends(items)
 
@@ -106,6 +118,69 @@ func (s *Service) Generate(ctx context.Context, opts ...context.Context) (string
 		}
 	}
 	return content, nil
+}
+
+// applySourceQuota diversifies a ranked list so no single source can
+// crowd out the rest. Every source present in the candidates keeps at
+// least minSeats items (when it has that many), and no source exceeds
+// maxSeats. Selection is still score-ordered within those constraints.
+func applySourceQuota(items []store.ScoredItem, max int) []store.ScoredItem {
+	const minSeats = 2
+	const maxSeats = 4
+
+	count := map[string]int{}
+	for _, it := range items {
+		count[it.Source]++
+	}
+	sources := make([]string, 0, len(count))
+	for s := range count {
+		sources = append(sources, s)
+	}
+	sort.Strings(sources) // deterministic
+
+	bestOf := map[string][]store.ScoredItem{}
+	for _, s := range sources {
+		bestOf[s] = bestOf[s][:0]
+	}
+	for _, it := range items {
+		bestOf[it.Source] = append(bestOf[it.Source], it) // already score-ordered
+	}
+
+	taken := map[string]int{}
+	out := make([]store.ScoredItem, 0, max)
+
+	// Phase 1: guarantee the per-source minimum.
+	for _, s := range sources {
+		n := minSeats
+		if len(bestOf[s]) < n {
+			n = len(bestOf[s])
+		}
+		out = append(out, bestOf[s][:n]...)
+		bestOf[s] = bestOf[s][n:]
+		taken[s] = n
+	}
+
+	// Phase 2: top-up by global score, capping each source at maxSeats.
+	for len(out) < max {
+		// pick the remaining item with the highest score among
+		// non-capped sources, if any
+		bestSource := ""
+		for _, s := range sources {
+			if len(bestOf[s]) == 0 || taken[s] >= maxSeats {
+				continue
+			}
+			if bestSource == "" || bestOf[s][0].Score.Final > bestOf[bestSource][0].Score.Final {
+				bestSource = s
+			}
+		}
+		if bestSource == "" {
+			break
+		}
+		out = append(out, bestOf[bestSource][0])
+		bestOf[bestSource] = bestOf[bestSource][1:]
+		taken[bestSource]++
+	}
+	return out
 }
 
 // detectTrends clusters items sharing >= 3 significant words in the title.

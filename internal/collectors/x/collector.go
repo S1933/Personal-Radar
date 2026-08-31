@@ -60,6 +60,25 @@ func WithVenvPython(p string) Option        { return func(c *Collector) { c.venv
 func WithTwscrapeDB(p string) Option        { return func(c *Collector) { c.twscrapeDB = p } }
 func WithTimeout(d time.Duration) Option    { return func(c *Collector) { c.timeout = d } }
 
+// num extracts an int64 from a JSON-decoded number (float64, json.Number)
+// or a numeric string ("123" — twscrape serializes counts as strings).
+func num(v any) (int64, bool) {
+	switch n := v.(type) {
+	case float64:
+		return int64(n), n > 0
+	case json.Number:
+		if i, err := n.Int64(); err == nil {
+			return i, i > 0
+		}
+	case string:
+		var i int64
+		if _, err := fmt.Sscanf(n, "%d", &i); err == nil {
+			return i, i > 0
+		}
+	}
+	return 0, false
+}
+
 func (c *Collector) Name() string { return "x" }
 
 // Collect invokes the twscrape sidecar and parses its JSON output.
@@ -122,6 +141,15 @@ func (c *Collector) Collect(ctx context.Context) ([]model.Item, error) {
 			Topics:      r.Topics,
 			Language:    r.Language,
 			Metadata:    toStringMap(r.Metadata),
+		}
+		// twscrape metadata carries the engagement signals that users care
+		// about — feed them into the normalised Engagement field so the
+		// ranker can weigh virality, not just raw text.
+		if likes, ok := num(r.Metadata["likes"]); ok {
+			it.Engagement.Score = likes
+		}
+		if rt, ok := num(r.Metadata["retweets"]); ok {
+			it.Engagement.Comments = rt
 		}
 		if r.PublishedAt != nil {
 			it.PublishedAt = *r.PublishedAt

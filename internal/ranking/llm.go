@@ -99,7 +99,15 @@ func (s *llmScorer) Score(ctx context.Context, it store.ScoredItem) (store.Score
 }
 
 func buildRankPrompt(it store.ScoredItem) string {
-	return fmt.Sprintf("Title: %s\nSource: %s\nContent: %s", it.Title, it.Source, truncate(it.Content, 1200))
+	// Virality is a first-class signal: a 280-char tweet can't be judged
+	// fairly on text alone, so hand the LLM the engagement numbers too.
+	engagement := ""
+	if it.Engagement > 0 {
+		engagement = fmt.Sprintf(" (viral: %d likes/shares)", it.Engagement)
+	}
+	return fmt.Sprintf(
+		"Title: %s\nSource: %s%s\nContent: %s",
+		it.Title, it.Source, engagement, truncate(it.Content, 1200))
 }
 
 func truncate(s string, n int) string {
