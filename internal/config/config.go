@@ -110,13 +110,15 @@ type GitHubConfig struct {
 }
 
 type XConfig struct {
-	Enabled     bool     `yaml:"enabled"`
-	Accounts    []string `yaml:"accounts"`
-	Queries     []string `yaml:"queries"`
-	Lists       []string `yaml:"lists"` // X list IDs (x.com/i/lists/<id>) — followed live
-	APIKey      string   `yaml:"-"` // from env X_API_KEY
-	APISecret   string   `yaml:"-"` // from env X_API_SECRET
-	BearerToken string   `yaml:"-"` // from env X_BEARER_TOKEN
+	Enabled     bool          `yaml:"enabled"`
+	Accounts    []string      `yaml:"accounts"`
+	Queries     []string      `yaml:"queries"`
+	Lists       []string      `yaml:"lists"` // X list IDs (x.com/i/lists/<id>) — followed live
+	APIKey      string        `yaml:"-"` // from env X_API_KEY
+	APISecret   string        `yaml:"-"` // from env X_API_SECRET
+	BearerToken string        `yaml:"-"` // from env X_BEARER_TOKEN
+	Limit       int           `yaml:"limit"`   // tweets per account / query / list
+	Timeout     time.Duration `yaml:"timeout"` // sidecar invocation budget
 }
 
 type LinkedInConfig struct {
@@ -235,6 +237,16 @@ func (c *Config) defaults() {
 	}
 	if c.Reddit.Limit == 0 {
 		c.Reddit.Limit = 25
+	}
+	if c.X.Limit == 0 {
+		c.X.Limit = 15
+	}
+	if c.X.Timeout == 0 {
+		// 3 minutes is the budget for 5 accounts + 2 queries + 1 list
+		// at 15 tweets each, including twscrape's per-request throttling.
+		// The previous 60s was not enough on slow days and caused spurious
+		// 0-item cycles.
+		c.X.Timeout = 3 * time.Minute
 	}
 	if c.Models.BaseURL == "" {
 		c.Models.BaseURL = "https://api.openai.com/v1"

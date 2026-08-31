@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/S1933/personal-radar/internal/config"
@@ -83,7 +83,22 @@ func (c *Collector) Name() string { return "x" }
 
 // Collect invokes the twscrape sidecar and parses its JSON output.
 func (c *Collector) Collect(ctx context.Context) ([]model.Item, error) {
-	args := []string{c.scriptPath, "--limit", "15"}
+	// The sidecar talks to X's internal GraphQL endpoints: a stuck
+	// socket there would freeze the whole collection cycle, since
+	// the scheduler runs jobs sequentially. Derive a bounded context
+	// from c.cfg.Timeout (defaults to 3 minutes) so a runaway process
+	// cannot wedge the pipeline indefinitely.
+	if c.cfg.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, c.cfg.Timeout)
+		defer cancel()
+	}
+
+	limit := c.cfg.Limit
+	if limit <= 0 {
+		limit = 15
+	}
+	args := []string{c.scriptPath, "--limit", strconv.Itoa(limit)}
 	for _, a := range c.cfg.Accounts {
 		args = append(args, "--accounts", a)
 	}
@@ -105,6 +120,11 @@ func (c *Collector) Collect(ctx context.Context) ([]model.Item, error) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
+		// Distinguish a timeout (ctx.Err() != nil) from a script error:
+		// the cause is different and the log message should reflect it.
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("x sidecar timed out after %s: %w", c.cfg.Timeout, ctx.Err())
+		}
 		return nil, fmt.Errorf("x sidecar failed: %w: %s", err, stderr.String())
 	}
 
@@ -163,19 +183,6 @@ func (c *Collector) Collect(ctx context.Context) ([]model.Item, error) {
 		items = append(items, it)
 	}
 	return items, nil
-}
-
-// repoRoot returns the project root by walking up from this file until it
-// finds go.mod (used to resolve the xscraper script at runtime).
-func repoRoot() string {
-	dir, _ := os.Getwd()
-	for i := 0; i < 6; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir
-		}
-		dir = filepath.Dir(dir)
-	}
-	return "."
 }
 
 func toStringMap(in map[string]any) map[string]string {

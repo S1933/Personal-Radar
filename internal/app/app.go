@@ -201,22 +201,7 @@ func (a *App) CollectOnce(ctx context.Context) (int, error) {
 	}
 	var total int
 	for _, c := range collectors {
-		start := time.Now()
-		items, err := c.Collect(ctx)
-		if err != nil {
-			a.Log.Warn("collector failed", "collector", c.Name(), "error", err, "duration_ms", time.Since(start).Milliseconds())
-			continue
-		}
-		// Duplicate items returned by several collectors (or the same feed)
-		// are merged into a single row on insert; existing rows are counted
-		// via item_sources.
-		inserted, err := a.Ingest.IngestBatch(ctx, c.Name(), items)
-		if err != nil {
-			a.Log.Warn("ingest failed", "collector", c.Name(), "error", err)
-			continue
-		}
-		total += inserted
-		a.Log.Info("collect ok", "collector", c.Name(), "items", len(items), "new", inserted, "duration_ms", time.Since(start).Milliseconds())
+		total += a.runCollector(ctx, c)
 	}
 	return total, nil
 }
@@ -231,19 +216,59 @@ func (a *App) collectReddit(ctx context.Context) error {
 		a.Log.Warn("reddit oauth unavailable, using public adapter", "error", err.Error())
 		c = reddit.NewPublicCollector(a.Cfg.Reddit, a.Log.With("sub", "reddit-public"))
 	}
-	start := time.Now()
-	items, err := c.Collect(ctx)
-	if err != nil {
-		a.Log.Warn("reddit collector failed", "error", err, "duration_ms", time.Since(start).Milliseconds())
-		return err
-	}
-	inserted, err := a.Ingest.IngestBatch(ctx, c.Name(), items)
-	if err != nil {
-		a.Log.Warn("reddit ingest failed", "error", err)
-		return err
-	}
-	a.Log.Info("collect ok", "collector", c.Name(), "items", len(items), "new", inserted, "duration_ms", time.Since(start).Milliseconds())
+	a.runCollector(ctx, c)
 	return nil
+}
+
+// perCollectorBudget bounds a single collector's run. Collectors
+// execute sequentially, and scheduler.loop calls Run in series — so
+// one that hangs blocks every source behind it indefinitely. 5 minutes
+// is the largest the slowest sidecar (X with 5 accounts + lists) has
+// ever needed in practice, doubled for safety.
+const perCollectorBudget = 5 * time.Minute
+
+// runCollector runs one collector under a time budget, ingests any
+// partial result the collector managed to return, logs the outcome,
+// and never propagates a failure: one broken source must not abort the
+// cycle. The function also records the run for observability (T13).
+func (a *App) runCollector(ctx context.Context, c ingestion.Collector) int {
+	start := time.Now()
+	cctx, cancel := context.WithTimeout(ctx, perCollectorBudget)
+	defer cancel()
+
+	var inserted, failed int
+	var errMsg string
+
+	items, err := c.Collect(cctx)
+	if err != nil {
+		errMsg = err.Error()
+		failed = len(items)
+		a.Log.Warn("collector failed", "collector", c.Name(), "error", err,
+			"duration_ms", time.Since(start).Milliseconds())
+	}
+	// A collector may return a partial result with an error
+	// (isolation rule): ingest what arrived, then record the run.
+	if len(items) > 0 {
+		n, ierr := a.Ingest.IngestBatch(ctx, c.Name(), items)
+		if ierr != nil {
+			if errMsg == "" {
+				errMsg = ierr.Error()
+			} else {
+				errMsg = errMsg + "; " + ierr.Error()
+			}
+			a.Log.Warn("ingest failed", "collector", c.Name(), "error", ierr)
+		} else {
+			inserted = n
+			a.Log.Info("collect ok", "collector", c.Name(), "items", len(items),
+				"new", inserted, "duration_ms", time.Since(start).Milliseconds())
+		}
+	}
+
+	if err := a.Store.SaveRun(ctx, "collect", c.Name(), start, time.Now(),
+		inserted, failed, errMsg); err != nil {
+		a.Log.Warn("save run", "collector", c.Name(), "error", err)
+	}
+	return inserted
 }
 
 // RankPending scores items that do not have a score yet.
