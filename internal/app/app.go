@@ -117,6 +117,35 @@ func (a *App) Migrate(ctx context.Context) error {
 	return a.DB.Migrate(ctx)
 }
 
+// briefingSlots merges the configured daily slots with the legacy single
+// schedule, de-duplicating and preserving order.
+//
+// The legacy field only applies when no modern slot is configured: it
+// carries a "07:00" default, and blindly appending it produced a fourth
+// briefing nobody asked for. The copy also matters — appending straight
+// onto cfg.Briefing.Schedules can write into the config's backing array.
+func briefingSlots(schedules []string, legacy string) []string {
+	out := make([]string, 0, len(schedules)+1)
+	seen := map[string]bool{}
+	add := func(s string) {
+		if s == "" || seen[s] {
+			return
+		}
+		seen[s] = true
+		out = append(out, s)
+	}
+	for _, s := range schedules {
+		add(s)
+	}
+	if len(out) == 0 {
+		add(legacy)
+	}
+	if len(out) == 0 {
+		add("07:00")
+	}
+	return out
+}
+
 // collectors builds the enabled collector set for this cycle.
 func (a *App) collectors(ctx context.Context) []ingestion.Collector {
 	var out []ingestion.Collector
@@ -304,13 +333,7 @@ func (a *App) Run(ctx context.Context) error {
 	}
 	// Briefing: one job per daily slot (default single 07:00, or the
 	// configured schedules list). Each slot generates + sends the briefing.
-	slots := a.Cfg.Briefing.Schedules
-	if a.Cfg.Briefing.Schedule != "" {
-		slots = append(slots, a.Cfg.Briefing.Schedule)
-	}
-	if len(slots) == 0 {
-		slots = []string{"07:00"}
-	}
+	slots := briefingSlots(a.Cfg.Briefing.Schedules, a.Cfg.Briefing.Schedule)
 	for i, slot := range slots {
 		s := slot // capture loop var
 		a.Scheduler.Add(fmt.Sprintf("briefing-%02d", i), scheduler.Spec{

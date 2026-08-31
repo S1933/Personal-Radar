@@ -217,7 +217,12 @@ func (c *Config) defaults() {
 		c.LogLevel = "info"
 	}
 	if c.Briefing.Schedule == "" {
-		c.Briefing.Schedule = "07:00"
+		// The legacy default only applies when no modern slot list is
+		// configured, otherwise it silently adds itself to the list
+		// and produces a fourth briefing nobody asked for.
+		if len(c.Briefing.Schedules) == 0 {
+			c.Briefing.Schedule = "07:00"
+		}
 	}
 	if c.Briefing.MaxItems == 0 {
 		c.Briefing.MaxItems = 10
