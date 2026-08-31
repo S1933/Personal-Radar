@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"time"
 
@@ -71,7 +72,12 @@ func (d DatabaseConfig) DSN() string {
 	if name == "" {
 		name = "radar"
 	}
-	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable", user, pass, host, port, name)
+	// url.QueryEscape handles '@', ':', '?', '#', '/', '+', '%'
+	// in user-supplied passwords; the previous DSN() had 4
+	// placeholders and 5 args, so Go appended "%!(EXTRA string=<password>)"
+	// and the resulting string was not a valid Postgres URL.
+	encoded := url.QueryEscape(pass)
+	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable", user, encoded, host, port, name)
 }
 
 type BriefingConfig struct {

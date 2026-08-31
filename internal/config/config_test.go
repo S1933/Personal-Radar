@@ -65,22 +65,41 @@ func TestDefaults(t *testing.T) {
 }
 
 func TestDSNFromEnv(t *testing.T) {
-	// NB: DSN() has a long-standing bug: its Sprintf has 4 placeholders
-	// but 5 args, so Go appends "%!(EXTRA string=<password>)" to the
-	// output and the resulting string is not a valid Postgres URL.
-	// We test the prefix only, until DSN() is fixed (T17 will rework
-	// secrets + the DSN format).
 	t.Setenv("RADAR_DB_HOST", "dbhost")
 	t.Setenv("RADAR_DB_PORT", "5433")
 	t.Setenv("RADAR_DB_PASSWORD", "secret")
 	cfg := Config{Database: DatabaseConfig{User: "radar", Name: "radar"}}
 	dsn := cfg.Database.DSN()
 
-	if !strings.HasPrefix(dsn, "postgres://radar:") {
-		t.Errorf("dsn prefix = %q, want postgres://radar:", dsn)
+	// The previous DSN had 4 placeholders and 5 args, so Go appended
+	// "%!(EXTRA string=<password>)" and the result was not a valid
+	// Postgres URL. We now check the actual structure.
+	if !strings.HasPrefix(dsn, "postgres://radar:secret@") {
+		t.Errorf("dsn prefix = %q, want postgres://radar:secret@", dsn)
 	}
 	if !strings.Contains(dsn, "@dbhost:5433/radar") {
 		t.Errorf("dsn missing host/port: %q", dsn)
+	}
+	if strings.Contains(dsn, "***") || strings.Contains(dsn, "%!") {
+		t.Errorf("dsn contains diagnostic tokens (*** or %%!): %q", dsn)
+	}
+}
+
+func TestDSNFromEnv_URLSafePassword(t *testing.T) {
+	// A password with characters that must be percent-encoded
+	// (e.g. @, /, #) used to silently break the URL.
+	t.Setenv("RADAR_DB_HOST", "dbhost")
+	t.Setenv("RADAR_DB_PORT", "5432")
+	t.Setenv("RADAR_DB_PASSWORD", "p@ss/word#1")
+	cfg := Config{Database: DatabaseConfig{User: "radar", Name: "radar"}}
+	dsn := cfg.Database.DSN()
+	// The literal '@' from the password must not leak into the URL
+	// body — only the '@' between credentials and host is allowed.
+	if strings.Count(dsn, "@") != 1 {
+		t.Errorf("dsn should contain exactly one @, got %d in %q", strings.Count(dsn, "@"), dsn)
+	}
+	if !strings.HasPrefix(dsn, "postgres://radar:p%40ss%2Fword%231@") {
+		t.Errorf("password not properly encoded: %q", dsn)
 	}
 }
 
