@@ -39,7 +39,7 @@ func (s *Store) InsertItem(ctx context.Context, it model.Item) (int64, bool, err
 		RETURNING id`,
 		it.Source, it.SourceID, it.URL, it.CanonicalURL, it.Author, it.AuthorID,
 		it.Title, it.Content, sql.NullTime{Time: it.PublishedAt, Valid: !it.PublishedAt.IsZero()},
-		time.Now().UTC(), ContentHash(it), it.Topics, it.Language,
+		time.Now().UTC(), model.ContentHash(it), it.Topics, it.Language,
 		it.Engagement.Score, string(meta),
 	).Scan(&id)
 	if err == sql.ErrNoRows {
@@ -60,9 +60,47 @@ func (s *Store) InsertItem(ctx context.Context, it model.Item) (int64, bool, err
 // AddItemSource records that an item was also seen through another source ref.
 func (s *Store) AddItemSource(ctx context.Context, itemID int64, source, ref string) error {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO item_sources (item_id, source, source_ref) VALUES ($1,$2,$3)
-		ON CONFLICT DO NOTHING`, itemID, source, ref)
+	INSERT INTO item_sources (item_id, source, source_ref) VALUES ($1,$2,$3)
+	ON CONFLICT DO NOTHING`, itemID, source, ref)
 	return err
+}
+
+// FindDuplicate locates an existing item describing the same content
+// as the incoming one. Canonical URL is tried first (strongest
+// signal), then the content hash (title + first 2KB of body), which
+// catches the same story republished under different URLs.
+//
+// Returns (0, false, nil) when the item is genuinely new. URL
+// normalisation (utm_*, fragments, trailing slashes) is intentionally
+// not applied here — the plan calls for a separate normalisation
+// pass; doing it now would silently merge items that should stay
+// distinct during the rollout.
+func (s *Store) FindDuplicate(ctx context.Context, canonicalURL, hash string) (int64, bool, error) {
+	if canonicalURL != "" {
+		var id int64
+		err := s.db.QueryRowContext(ctx,
+			`SELECT id FROM items WHERE canonical_url = $1 LIMIT 1`, canonicalURL,
+		).Scan(&id)
+		if err == nil {
+			return id, true, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return 0, false, err
+		}
+	}
+	if hash != "" {
+		var id int64
+		err := s.db.QueryRowContext(ctx,
+			`SELECT id FROM items WHERE content_hash = $1 AND content_hash <> '' LIMIT 1`, hash,
+		).Scan(&id)
+		if err == nil {
+			return id, true, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return 0, false, err
+		}
+	}
+	return 0, false, nil
 }
 
 // ItemByID loads a single item.
