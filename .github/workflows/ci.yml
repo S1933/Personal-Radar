@@ -1,0 +1,71 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-flight runs of the same branch on every new push.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Quick feedback loop: static checks + short tests. No cross-compile,
+  # no network. Target ≤ 2 min.
+  test:
+    name: vet + test (go ${{ matrix.go }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ["1.25"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+      - name: Verify modules
+        run: go mod verify
+      - name: Static checks
+        run: go vet ./...
+      - name: Short tests
+        run: go test -short -race ./internal/...
+
+  # Slow path: cross-compile every platform the radar runs on. Skipped
+  # for draft PRs to save minutes; the release workflow runs it again
+  # on tag push.
+  build:
+    name: cross-compile (${{ matrix.platform }})
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - linux/amd64
+          - linux/arm64
+          - darwin/amd64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+      - name: Build ${{ matrix.platform }}
+        run: |
+          os=$(echo ${{ matrix.platform }} | cut -d/ -f1)
+          arch=$(echo ${{ matrix.platform }} | cut -d/ -f2)
+          mkdir -p dist
+          CGO_ENABLED=0 GOOS=$os GOARCH=$arch \
+            go build -ldflags "-s -w -X main.version=${GITHUB_SHA::7}" \
+            -o dist/radar-$os-$arch ./cmd/radar
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: radar-${{ matrix.platform }}
+          path: dist/radar-${{ matrix.platform }}
+          if-no-files-found: error
