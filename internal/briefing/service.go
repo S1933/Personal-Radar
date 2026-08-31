@@ -3,6 +3,7 @@ package briefing
 import (
 	"context"
 	"fmt"
+	"html"
 	"sort"
 	"strings"
 	"time"
@@ -214,7 +215,9 @@ func (s *Service) detectTrends(items []store.ScoredItem) []string {
 	var out []string
 	for _, c := range clusters {
 		if c.count >= 3 && len(out) < s.opts.MaxTrends {
-			out = append(out, fmt.Sprintf("• %s (%d sources)", c.titles[0], c.count))
+			// Escape the title at construction time: render() is
+			// already escaped, and escaping twice corrupts "•".
+			out = append(out, fmt.Sprintf("• %s (%d sources)", escapeHTML(c.titles[0]), c.count))
 		}
 	}
 	return out
@@ -263,7 +266,7 @@ func (s *Service) loc() *time.Location {
 func (s *Service) render(ctx context.Context, items []store.ScoredItem, trends []string) string {
 	var b strings.Builder
 	now := time.Now().In(s.loc())
-	fmt.Fprintf(&b, "☀️ *DAILY RADAR*\n%s\n\n", now.Format("Monday 2 January 2006"))
+	fmt.Fprintf(&b, "☀️ <b>DAILY RADAR</b>\n%s\n\n", now.Format("Monday 2 January 2006"))
 
 	if len(items) == 0 {
 		b.WriteString("Rien de marquant aujourd'hui — calme plat.\n")
@@ -283,26 +286,34 @@ func (s *Service) render(ctx context.Context, items []store.ScoredItem, trends [
 		deduped = append(deduped, it)
 	}
 
-	fmt.Fprintf(&b, "🔥 *À NE PAS MANQUER*\n\n")
+	b.WriteString("🔥 <b>À NE PAS MANQUER</b>\n\n")
 	for i, it := range deduped {
 		icon := sourceIcon(it.Source)
-		fmt.Fprintf(&b, "%d. %s [*%s*](%s)\n", i+1, icon, escape(it.Title), it.URL)
+		// Both the URL and the title must be escaped: an unescaped "&"
+		// in a URL breaks the href, and a "_" or "*" in a title
+		// already breaks the entire message under Markdown v1 — the
+		// whole reason we moved to HTML.
+		fmt.Fprintf(&b, "%d. %s <a href=\"%s\"><b>%s</b></a>\n",
+			i+1, icon, escapeHTML(it.URL), escapeHTML(it.Title))
 		// Optional LLM "why it matters" line (best-effort).
 		if s.synth != nil {
 			if why, err := s.synth.Rationale(ctx, it.Title, it.Content, it.Source); err == nil && why != "" {
-				fmt.Fprintf(&b, "   💡 %s\n", why)
+				fmt.Fprintf(&b, "   💡 %s\n", escapeHTML(why))
 			}
 		}
 	}
 
 	if len(trends) > 0 {
-		b.WriteString("\n🧠 *TENDANCES*\n\n")
+		b.WriteString("\n🧠 <b>TENDANCES</b>\n\n")
 		for _, t := range trends {
 			b.WriteString(t + "\n")
 		}
 	}
 
-	b.WriteString("\n💡 _Réponds 👍/👎/🔥/📌 ou /save N pour affiner le radar._")
+	// Footer reflects the syntax that actually works after T4 (the
+	// reaction loop now reads the id from the message). Markdown
+	// backticks render as-is under HTML, no escape needed.
+	b.WriteString("\n💡 <i>Réponds 👍 12 / 👎 12 / 🔥 12 / 📌 12, ou /save 12, pour affiner le radar.</i>")
 	return b.String()
 }
 
@@ -335,8 +346,11 @@ func normTitle(t string) string {
 	return b.String()
 }
 
-func escape(s string) string {
-	s = strings.ReplaceAll(s, "[", "(")
-	s = strings.ReplaceAll(s, "]", ")")
-	return s
-}
+// escapeHTML prepares arbitrary text for Telegram's HTML parse mode.
+// Telegram only requires &, < and > to be escaped, but html.EscapeString
+// also handles quotes — which matters inside href attributes.
+//
+// HTML is used instead of Markdown because Markdown v1 offers no escape
+// mechanism at all: a title containing "_" or "*" produced unbalanced
+// entities and a 400 from the API, losing the whole briefing.
+func escapeHTML(s string) string { return html.EscapeString(s) }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"strings"
@@ -13,6 +14,13 @@ import (
 	"github.com/S1933/personal-radar/internal/config"
 	"github.com/S1933/personal-radar/internal/model"
 )
+
+// escapeHTML mirrors internal/briefing.escapeHTML; duplicated here to
+// avoid a cross-package import for one call. T7 (textutil) will fold
+// both copies into a shared package.
+func escapeHTML(s string) string {
+	return html.EscapeString(s)
+}
 
 // DeepDiveItem fetches an item by DB id and returns an LLM analysis.
 // Returns a user-facing error message on any failure (non-fatal).
@@ -29,7 +37,7 @@ func (a *App) DeepDiveItem(ctx context.Context, id int64) (string, error) {
 		return "", fmt.Errorf("deepdive échoué: %w", err)
 	}
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("🔬 *DEEP DIVE* — %s\n\n", it.Title))
+	b.WriteString(fmt.Sprintf("🔬 <b>DEEP DIVE</b> — %s\n\n", escapeHTML(it.Title)))
 	b.WriteString(analysis)
 	b.WriteString(fmt.Sprintf("\n\n🔗 %s\n", it.URL))
 	return b.String(), nil
