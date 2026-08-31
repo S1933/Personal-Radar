@@ -128,6 +128,10 @@
       }
     }
 
+    /* iPhone: horizontal swipes switch views — tell Safari the page owns
+       horizontal panning so it doesn't trigger its history swipe-back. */
+    html, body { touch-action: pan-y; }
+
     /* description: AI title (clickable) + bullet list */
     .sum-title {
       color: #e6edf3; font-size: 15.5px; line-height: 1.4;
@@ -525,6 +529,36 @@
       }
     }
 
+    // ── Swipe navigation (iPhone) ──
+    // Horizontal swipe on the whole page switches between the views
+    // (unread -> liked -> pinned, right-to-left). Vertical scrolling stays
+    // native thanks to touch-action: pan-y (also prevents iOS swipe-back).
+    const VIEW_ORDER = ["unread", "liked", "pinned"];
+    let touchStart = null;
+    document.addEventListener("touchstart", (e) => {
+      touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }, { passive: true });
+    document.addEventListener("touchend", (e) => {
+      if (!touchStart) return;
+      const dx = e.changedTouches[0].clientX - touchStart.x;
+      const dy = e.changedTouches[0].clientY - touchStart.y;
+      touchStart = null;
+      // must be clearly horizontal (2x) and > 70px to count as a swipe
+      if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 2) return;
+      const idx = VIEW_ORDER.indexOf(currentFilter);
+      const next = idx + (dx < 0 ? 1 : -1);
+      if (next >= 0 && next < VIEW_ORDER.length) switchView(VIEW_ORDER[next]);
+    }, { passive: true });
+
+    // switchView changes the active filter + reloads the list.
+    // Shared by the filter buttons and by swipe navigation on touch.
+    function switchView(filter) {
+      document.querySelectorAll(".filters button").forEach(b => b.classList.toggle("active", b.dataset.filter === filter));
+      currentFilter = filter;
+      activeTag = null; // reset tag filter on view change
+      load();
+    }
+
     document.addEventListener("click", async (e) => {
       // tag filter (card chips + tagbar chips)
       const tagBtn = e.target.closest(".tag");
@@ -554,10 +588,7 @@
       }
       const f = e.target.closest(".filters button");
       if (f) {
-        document.querySelectorAll(".filters button").forEach(b => b.classList.toggle("active", b === f));
-        currentFilter = f.dataset.filter;
-        activeTag = null; // reset tag filter on view change
-        load();
+        switchView(f.dataset.filter);
         return;
       }
       if (e.target.id === "refresh" || e.target.closest("#refresh")) load();
