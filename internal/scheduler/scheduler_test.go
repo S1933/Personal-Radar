@@ -69,22 +69,23 @@ func TestSchedulerRecoversFromPanic(t *testing.T) {
 func TestRunJobDoesNotPanicOnCleanRun(t *testing.T) {
 	log := &captureLogger{}
 	s := New(log)
-	called := 0
-	// Use a 5ms interval job (not a daily one) — the scheduler loop
-	// path that exercises runJob directly. The previous version of
-	// this test mutated s.jobs[0].spec from the test goroutine
-	// while loop() was reading it; that race was caught by -race
-	// in CI (passing locally only because the Pi env cannot run
-	// -race: VMA limit).
+	// Counter through a channel: the test goroutine reads from
+	// 'done' while runJob writes to it, so there is no shared
+	// state to race on. Reading a bare int from the test while
+	// runJob writes it was a -race hit in CI (passing locally
+	// only because the Pi env cannot run -race).
+	done := make(chan struct{}, 4)
 	s.Add("ok", Spec{Every: 5 * time.Millisecond, Run: func(context.Context) {
-		called++
+		done <- struct{}{}
 	}})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	s.Start(ctx)
-	time.Sleep(30 * time.Millisecond)
-	if called == 0 {
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
 		t.Fatal("runJob n'a pas été appelée")
 	}
 	if log.hasPanic() {
