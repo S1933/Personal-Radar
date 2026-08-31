@@ -15,7 +15,6 @@ import (
 	"github.com/S1933/personal-radar/internal/collectors/x"
 	"github.com/S1933/personal-radar/internal/config"
 	"github.com/S1933/personal-radar/internal/db"
-	"github.com/S1933/personal-radar/internal/dedup"
 	"github.com/S1933/personal-radar/internal/ingestion"
 	"github.com/S1933/personal-radar/internal/logging"
 	"github.com/S1933/personal-radar/internal/personalization"
@@ -36,7 +35,6 @@ type App struct {
 	DB        *db.DB
 	Store     *store.Store
 	Ingest    *ingestion.Service
-	Dedup     *dedup.Service
 	Ranker    *ranking.Service
 	Prefs     *personalization.Service
 	Briefer   *briefing.Service
@@ -83,7 +81,6 @@ func New(ctx context.Context, cfg *config.Config, log *logging.Logger) (*App, er
 		DB:        database,
 		Store:     st,
 		Ingest:    svc,
-		Dedup:     dedup.New(st),
 		Ranker:    ranker,
 		Prefs:     prefs,
 		Briefer:   briefer,
@@ -150,7 +147,14 @@ func briefingSlots(schedules []string, legacy string) []string {
 func (a *App) collectors(ctx context.Context) []ingestion.Collector {
 	var out []ingestion.Collector
 	if a.Cfg.RSS.Enabled && len(a.Cfg.RSS.Feeds) > 0 {
-		out = append(out, rss.NewCollector(a.Cfg.RSS, a.Log.With("sub", "rss")))
+		c := rss.NewCollector(a.Cfg.RSS, a.Log.With("sub", "rss"))
+		// Conditional GET: without a state store, ETag/Last-Modified
+		// tokens are never persisted and the 9 feeds are re-downloaded
+		// in full every cycle (≈ 650 requests/day toward Le Monde,
+		// Cloudflare, HN, etc.). *store.Store already satisfies the
+		// rss.StateStore interface (GetFeedState / SaveFeedState).
+		c.SetStateStore(a.Store)
+		out = append(out, c)
 	}
 	if a.Cfg.Reddit.Enabled && len(a.Cfg.Reddit.Subreddits) > 0 && a.Cfg.Reddit.Every == 0 {
 		c, err := reddit.NewCollector(ctx, a.Cfg.Reddit, a.Log.With("sub", "reddit"))
