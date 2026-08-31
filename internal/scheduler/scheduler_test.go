@@ -70,15 +70,16 @@ func TestRunJobDoesNotPanicOnCleanRun(t *testing.T) {
 	log := &captureLogger{}
 	s := New(log)
 	called := 0
-	s.Add("ok", Spec{Every: 0, Run: func(context.Context) {
+	// Use a 5ms interval job (not a daily one) — the scheduler loop
+	// path that exercises runJob directly. The previous version of
+	// this test mutated s.jobs[0].spec from the test goroutine
+	// while loop() was reading it; that race was caught by -race
+	// in CI (passing locally only because the Pi env cannot run
+	// -race: VMA limit).
+	s.Add("ok", Spec{Every: 5 * time.Millisecond, Run: func(context.Context) {
 		called++
 	}})
-	// Daily path is the only one we can exercise without a ticker.
-	// We invoke runJob directly via Start with a DailyAt that never
-	// fires and then trigger via Add + a manual loop shortcut. To
-	// keep the test self-contained, just call runJob via reflection-
-	// free means: schedule a 1ms ticker and let it run once.
-	s.jobs[0].spec.Every = 5 * time.Millisecond
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	s.Start(ctx)
