@@ -259,7 +259,7 @@ func (s *Server) handleSummary(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 1) persisted summary first (fast path, no LLM)
-	existing, err := s.store.SummaryFR(r.Context(), id)
+	existTitle, existing, err := s.store.SummaryFR(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not found")
@@ -271,7 +271,7 @@ func (s *Server) handleSummary(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if existing != "" {
-		writeJSON(w, http.StatusOK, map[string]any{"id": id, "summary": existing, "cached": true})
+		writeSummary(w, id, existTitle, existing)
 		return
 	}
 
@@ -286,22 +286,22 @@ func (s *Server) handleSummary(w http.ResponseWriter, r *http.Request) {
 		}
 		// Check again inside the mutex — another request may have just
 		// generated it.
-		existing, _ = s.store.SummaryFR(r.Context(), id)
+		existTitle, existing, _ = s.store.SummaryFR(r.Context(), id)
 		if existing != "" {
-			writeJSON(w, http.StatusOK, map[string]any{"id": id, "summary": existing, "cached": true})
+			writeSummary(w, id, existTitle, existing)
 			return
 		}
-		summaryText, err := s.cfg.Summarizer.Summarize(r.Context(), id, it.Title, it.Content, it.Source, "")
-		if err != nil || summaryText == "" {
+		sg, err := s.cfg.Summarizer.Summarize(r.Context(), id, it.Title, it.Content, it.Source, summary.Summary{})
+		if err != nil || (sg.Title == "" && len(sg.Points) == 0) {
 			// Fallback: excerpt from raw content.
 			excerpt := excerpt(it.Content, 200)
-			writeJSON(w, http.StatusOK, map[string]any{"id": id, "summary": excerpt, "cached": false, "fallback": true})
+			writeJSON(w, http.StatusOK, map[string]any{"id": id, "title": "", "points": []string{excerpt}, "summary": excerpt, "cached": false, "fallback": true})
 			return
 		}
-		if err := s.store.SetSummaryFR(r.Context(), id, summaryText); err != nil {
+		if err := s.store.SetSummaryFR(r.Context(), id, sg.Title, strings.Join(sg.Points, "\n")); err != nil {
 			s.log.Warn("persist summary", "id", id, "error", err)
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"id": id, "summary": summaryText, "cached": false})
+		writeSummary(w, id, sg.Title, strings.Join(sg.Points, "\n"))
 		return
 	}
 
@@ -311,7 +311,26 @@ func (s *Server) handleSummary(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"id": id, "summary": excerpt(it.Content, 200), "cached": false, "fallback": true})
+	excerpt := excerpt(it.Content, 200)
+	writeJSON(w, http.StatusOK, map[string]any{"id": id, "title": "", "points": []string{excerpt}, "summary": excerpt, "cached": false, "fallback": true})
+}
+
+// writeSummary responds with title + bullet points derived from the
+// stored newline-separated summary_fr payload.
+func writeSummary(w http.ResponseWriter, id int64, title, stored string) {
+	var points []string
+	for _, l := range strings.Split(stored, "\n") {
+		l = strings.TrimSpace(l)
+		if l == "" {
+			continue
+		}
+		l = strings.TrimPrefix(l, "- ")
+		points = append(points, l)
+	}
+	if len(points) == 0 {
+		points = []string{stored}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"id": id, "title": title, "points": points, "summary": stored, "cached": true})
 }
 
 // excerpt returns the first n bytes of s on a word boundary, cleaned of

@@ -489,24 +489,23 @@ func (s *Store) ListBookmarks(ctx context.Context, filter BookmarkFilter, limit,
 	return out, total, rows.Err()
 }
 
-// SummaryFR returns the persisted French summary for an item ("" if none).
-// Used by the dashboard to skip LLM generation when a summary already
-// exists.
-func (s *Store) SummaryFR(ctx context.Context, id int64) (string, error) {
-	var summary string
-	err := s.db.QueryRowContext(ctx,
-		`SELECT summary_fr FROM items WHERE id = $1`, id).Scan(&summary)
+// SummaryFR returns the persisted French summary + title for an item
+// ("" if none). Used by the dashboard to skip LLM generation when a
+// summary already exists.
+func (s *Store) SummaryFR(ctx context.Context, id int64) (title, summary string, err error) {
+	err = s.db.QueryRowContext(ctx,
+		`SELECT COALESCE(summary_title, ''), summary_fr FROM items WHERE id = $1`, id).Scan(&title, &summary)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", ErrNotFound
+		return "", "", ErrNotFound
 	}
-	return summary, err
+	return title, summary, err
 }
 
-// SetSummaryFR persists a French summary on an item. Returns ErrNotFound
-// when the id does not exist (dashboard maps this to 404).
-func (s *Store) SetSummaryFR(ctx context.Context, id int64, summary string) error {
+// SetSummaryFR persists a French summary (title + bullets) on an item.
+// Returns ErrNotFound when the id does not exist (dashboard maps this to 404).
+func (s *Store) SetSummaryFR(ctx context.Context, id int64, title, summary string) error {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE items SET summary_fr = $1 WHERE id = $2`, summary, id)
+		`UPDATE items SET summary_title = $1, summary_fr = $2 WHERE id = $3`, title, summary, id)
 	if err != nil {
 		return err
 	}

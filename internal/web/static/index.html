@@ -128,15 +128,23 @@
       }
     }
 
-    /* description: the card's main clickable element (link to the article) */
-    .excerpt {
-      color: #c8cfd9; font-size: 15px; line-height: 1.45;
-      font-weight: 500;
+    /* description: AI title (clickable) + bullet list */
+    .sum-title {
+      color: #e6edf3; font-size: 15.5px; line-height: 1.4;
+      font-weight: 600; text-decoration: none;
       max-width: 100%;
       transition: color 0.12s;
     }
-    .excerpt.loading { color: #6b7480; font-style: italic; font-weight: 400; }
-    a.excerpt:hover { color: var(--accent); }
+    a.sum-title:hover { color: var(--accent); }
+    .sum-title.loading { color: #6b7480; font-style: italic; font-weight: 400; }
+    .sum-points {
+      margin: 6px 0 0; padding: 0 0 0 18px;
+      color: #c8cfd9; font-size: 13.5px; line-height: 1.5;
+      list-style: disc;
+    }
+    .sum-points li { margin-bottom: 3px; }
+    .sum-points.loading { visibility: hidden; }
+    .card-summary { display: flex; flex-direction: column; gap: 0; }
 
     /* tags: chips on the card */
     .tags { display: flex; flex-wrap: wrap; gap: 5px; }
@@ -217,7 +225,7 @@
         align-items: start;
       }
       .card { margin-bottom: 0; }
-      .excerpt:hover { color: #bcc5d0; }
+      .sum-title:hover { color: #bcc5d0; }
     }
   </style>
 </head>
@@ -306,7 +314,10 @@
       const chips = topics.slice(0, 3);
       const rest = topics.length - 3;
       card.innerHTML = `
-        <a class="excerpt loading" id="excerpt-${b.id}" href="${escape(url)}" target="_blank" rel="noopener">Résumé…</a>
+        <div class="card-summary" id="summary-${b.id}">
+          <a class="sum-title loading" id="title-${b.id}" href="${escape(url)}" target="_blank" rel="noopener">Résumé…</a>
+          <ul class="sum-points loading" id="points-${b.id}"></ul>
+        </div>
         ${chips.length ? `<div class="tags">${chips.map(t => `<button class="tag" data-tag="${escape(t)}">${escape(TAG_LABEL[t] || t)}</button>`).join("")}${rest > 0 ? `<span class="tag">+${rest}</span>` : ""}</div>` : ""}
         <div class="card-foot">
           <div class="meta">
@@ -326,17 +337,25 @@
     }
 
     async function loadSummary(id) {
-      const el = document.getElementById(`excerpt-${id}`);
+      const titleEl = document.getElementById(`title-${id}`);
+      const pointsEl = document.getElementById(`points-${id}`);
       try {
         const data = await fetchJSON(`/api/summary/${id}`);
-        if (el) {
-          el.classList.remove("loading");
-          el.textContent = data.summary || "—";
+        const pts = (data.points && data.points.length) ? data.points : (data.summary ? [data.summary] : []);
+        if (titleEl) {
+          titleEl.classList.remove("loading");
+          // title if present, else first point doubles as the clickable head
+          titleEl.textContent = data.title ? data.title : (pts[0] || "—");
+        }
+        if (pointsEl) {
+          pointsEl.classList.remove("loading");
+          const bullets = data.title ? pts : pts.slice(1);
+          pointsEl.innerHTML = bullets.map(p => `<li>${escape(p)}</li>`).join("");
         }
       } catch (e) {
-        if (el) {
-          el.classList.remove("loading");
-          el.textContent = "Résumé indisponible";
+        if (titleEl) {
+          titleEl.classList.remove("loading");
+          titleEl.textContent = "Résumé indisponible";
         }
       }
     }
