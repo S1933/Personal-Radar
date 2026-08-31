@@ -117,17 +117,87 @@ func (c *Client) api(method string, payload any) ([]byte, error) {
 	return b, nil
 }
 
-// Send posts a markdown message to the configured chat.
+// Send posts an HTML message to the configured chat, splitting it across
+// several messages when it exceeds Telegram's 4096-character limit.
+//
+// On a parse error (malformed entity in a source title we failed to
+// escape), the chunk is retried as plain text: a briefing with lost
+// formatting beats no briefing at all.
 func (c *Client) Send(ctx context.Context, text string) error {
 	if c.cfg.ChatID == "" {
 		return fmt.Errorf("no chat id configured")
 	}
-	_, err := c.api("sendMessage", map[string]any{
-		"chat_id":    c.cfg.ChatID,
-		"text":       text,
-		"parse_mode": "Markdown",
-	})
-	return err
+	for _, chunk := range splitMessage(text, maxMessageLen) {
+		if _, err := c.api("sendMessage", map[string]any{
+			"chat_id":                  c.cfg.ChatID,
+			"text":                     chunk,
+			"parse_mode":               "HTML",
+			"disable_web_page_preview": true,
+		}); err != nil {
+			c.log.Warn("send with HTML failed, retrying as plain text", "error", err)
+			if _, err2 := c.api("sendMessage", map[string]any{
+				"chat_id": c.cfg.ChatID,
+				"text":    chunk,
+			}); err2 != nil {
+				return err2
+			}
+		}
+	}
+	return nil
+}
+
+// maxMessageLen is Telegram's hard limit on sendMessage text.
+const maxMessageLen = 4096
+
+// splitMessage cuts s into chunks of at most max bytes, always on a line
+// boundary. Lines are never split mid-way: each line holds complete HTML
+// tags, so breaking between lines can never produce an unbalanced entity.
+func splitMessage(s string, max int) []string {
+	if len(s) <= max {
+		return []string{s}
+	}
+	var out []string
+	var buf strings.Builder
+	flush := func() {
+		if buf.Len() > 0 {
+			out = append(out, buf.String())
+			buf.Reset()
+		}
+	}
+	for _, line := range strings.Split(s, "\n") {
+		if len(line) > max {
+			// Pathological single line (e.g. one giant URL): cut on
+			// a rune boundary. The T7 textutil.Truncate will replace
+			// this once that package lands.
+			line = truncateRunes(line, max/4, "…")
+		}
+		if buf.Len()+len(line)+1 > max {
+			flush()
+		}
+		if buf.Len() > 0 {
+			buf.WriteByte('\n')
+		}
+		buf.WriteString(line)
+	}
+	flush()
+	return out
+}
+
+// truncateRunes is a UTF-8-safe cut kept local to the telegram package
+// until the shared textutil package lands in T7. Ranging over a string
+// yields rune start offsets, so s[:i] is always a valid cut.
+func truncateRunes(s string, n int, suffix string) string {
+	if n <= 0 {
+		return suffix
+	}
+	count := 0
+	for i := range s {
+		if count == n {
+			return s[:i] + suffix
+		}
+		count++
+	}
+	return s
 }
 
 // RegisterHandler attaches a command handler.
@@ -193,8 +263,14 @@ func (c *Client) Listen(ctx context.Context, handlers map[string]Handler) error 
 			cmd := parse(u.Message.Text)
 			reply := c.dispatch(ctx, cmd)
 			if reply != "" && c.cfg.ChatID != "" {
+				// HTML for the same reason as Send(): a source we
+				// don't control is replying with content that may
+				// contain "_" or "*" and break Markdown v1.
 				if _, err := c.api("sendMessage", map[string]any{
-					"chat_id": c.cfg.ChatID, "text": reply, "parse_mode": "Markdown",
+					"chat_id":                  c.cfg.ChatID,
+					"text":                     reply,
+					"parse_mode":               "HTML",
+					"disable_web_page_preview": true,
 				}); err != nil {
 					c.log.Warn("reply", "error", err)
 				}
@@ -203,26 +279,38 @@ func (c *Client) Listen(ctx context.Context, handlers map[string]Handler) error 
 	}
 }
 
+// parse turns a raw Telegram message into a Command.
+//
+// Two shapes are supported, both may carry an item id:
+//   "/save 12"   → {Action: "save", ItemID: 12}
+//   "👍 12"      → {Action: "reaction", Emoji: "👍", ItemID: 12}
+//
+// The emoji is matched on the first field, not on the whole message: the
+// previous version switched on the trimmed text, so any reaction carrying
+// an id fell through and was silently dropped — the feedback loop was
+// effectively dead for the whole life of the product.
 func parse(text string) Command {
-	t := strings.TrimSpace(text)
-	switch t {
-	case "👍":
-		return Command{Action: "reaction", Emoji: "👍"}
-	case "👎":
-		return Command{Action: "reaction", Emoji: "👎"}
-	case "🔥":
-		return Command{Action: "reaction", Emoji: "🔥"}
-	case "📌":
-		return Command{Action: "reaction", Emoji: "📌"}
-	}
-	fields := strings.Fields(t)
+	fields := strings.Fields(strings.TrimSpace(text))
 	if len(fields) == 0 {
 		return Command{}
 	}
-	cmd := strings.TrimPrefix(fields[0], "/")
-	c := Command{Action: cmd}
+
+	var c Command
+	switch head := fields[0]; head {
+	case "👍", "👎", "🔥", "📌":
+		c.Action = "reaction"
+		c.Emoji = head
+	default:
+		action := strings.TrimPrefix(head, "/")
+		// Telegram appends "@BotName" to commands sent in groups.
+		if i := strings.IndexByte(action, '@'); i > 0 {
+			action = action[:i]
+		}
+		c.Action = action
+	}
+
 	if len(fields) > 1 {
-		if id, err := strconv.ParseInt(fields[1], 10, 64); err == nil {
+		if id, err := strconv.ParseInt(fields[1], 10, 64); err == nil && id > 0 {
 			c.ItemID = id
 		}
 	}

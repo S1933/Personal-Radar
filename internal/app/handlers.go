@@ -15,7 +15,7 @@ import (
 func (a *App) TelegramHandlers() map[string]telegram.Handler {
 	cmdHandler := &commandHandler{app: a}
 	out := map[string]telegram.Handler{}
-	for _, name := range []string{"start", "today", "deepdive", "save", "ignore", "more", "less", "sources", "status", "reaction"} {
+	for _, name := range []string{"start", "today", "briefing", "help", "deepdive", "save", "ignore", "more", "less", "sources", "status", "reaction"} {
 		out[name] = cmdHandler
 	}
 	return out
@@ -28,7 +28,7 @@ type commandHandler struct {
 func (h *commandHandler) Handle(ctx context.Context, cmd telegram.Command) (string, error) {
 	a := h.app
 	switch cmd.Action {
-	case "start":
+	case "start", "help":
 		return "☀️ Personal Radar actif.\n\n" +
 			"/today — briefing du jour\n" +
 			"/save N — archiver dans Obsidian\n" +
@@ -39,7 +39,7 @@ func (h *commandHandler) Handle(ctx context.Context, cmd telegram.Command) (stri
 			"/status — stats du jour\n" +
 			"Réactions: 👍 👎 🔥 📌 (avec le numéro de l'item)", nil
 
-	case "today":
+	case "today", "briefing":
 		return a.Briefer.Generate(ctx)
 
 	case "save":
@@ -74,6 +74,9 @@ func (h *commandHandler) Handle(ctx context.Context, cmd telegram.Command) (stri
 		return "📉 Noté: moins de ce type de contenu.", nil
 
 	case "reaction":
+		if cmd.ItemID == 0 {
+			return "Ajoute le numéro de l'item : par exemple `👍 12` pour liker l'item 12.", nil
+		}
 		switch cmd.Emoji {
 		case "👍":
 			return h.Handle(ctx, telegram.Command{Action: "more", ItemID: cmd.ItemID})
