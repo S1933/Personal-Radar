@@ -310,6 +310,7 @@
       const card = document.createElement("div");
       card.className = "card" + (b.is_liked ? " liked" : "");
       card.dataset.tags = topics.join("|");
+      card.dataset.read = b.is_read ? "1" : "0";
       // show up to 3 chips (the ingestion pipeline now guarantees 3 tags)
       const chips = topics.slice(0, 3);
       const rest = topics.length - 3;
@@ -383,11 +384,74 @@
       document.querySelectorAll(".tag").forEach(t => t.classList.toggle("active", t.dataset.tag === activeTag));
     }
 
+    let lastItems = []; // items of the last load(), used to patch tags/counts locally
+
+    // Optimistic like/unlike: patch the card in place instead of reloading
+    // the whole list (which re-fetches summaries and makes the page jump).
+    function applyLikeLocal(id, liked) {
+      // find the card by its like button
+      const btn = document.querySelector(`button[data-action][data-id="${id}"]`);
+      const cardEl = btn ? btn.closest(".card") : null;
+      if (!cardEl) { load(); return; }
+      const item = lastItems.find(b => b.id === id);
+      // 1) update the like button + card state
+      cardEl.classList.toggle("liked", liked);
+      cardEl.dataset.read = "1";
+      const oldBtn = cardEl.querySelector("button[data-action]");
+      if (oldBtn) {
+        oldBtn.classList.remove("like", "liked");
+        oldBtn.classList.add(liked ? "liked" : "like");
+        oldBtn.dataset.action = liked ? "unlike" : "like";
+        oldBtn.textContent = liked ? "♥ Liké" : "♡ Like";
+      }
+      // 2) like in the "unread" view removes the card (item becomes read);
+      //    unlike in the "liked" view removes it too. Animate the height so
+      //    the grid reflows smoothly instead of jumping.
+      const leaves = (currentFilter === "unread" && liked) || (currentFilter === "liked" && !liked);
+      if (leaves) {
+        const h = cardEl.offsetHeight;
+        cardEl.style.transition = "height 220ms ease, opacity 220ms ease, margin 220ms ease, padding 220ms ease";
+        cardEl.style.overflow = "hidden";
+        cardEl.style.padding = "0 14px";
+        cardEl.style.height = h + "px";
+        requestAnimationFrame(() => {
+          cardEl.style.height = "0px";
+          cardEl.style.opacity = "0";
+          cardEl.style.marginBottom = "0px";
+        });
+        setTimeout(() => {
+          cardEl.remove();
+          // keep tagbar counts + totals consistent with what's left
+          if (item) {
+            const idx = lastItems.indexOf(item);
+            if (idx >= 0) lastItems.splice(idx, 1);
+            renderTagBar(lastItems);
+          }
+          const totalEl = document.getElementById("count");
+          const cur = totalEl.textContent.replace(/[^\d]/g, "");
+          totalEl.textContent = cur ? `· ${parseInt(cur, 10) - 1}` : "";
+          const listEl = document.getElementById("list");
+          if (listEl && !listEl.children.length) {
+            listEl.innerHTML = `<div class="empty">Rien à afficher<small>Le prochain briefing alimentera cette liste.</small></div>`;
+            document.getElementById("readall").style.display = "none";
+          }
+          applyTagFilter();
+        }, 240);
+      } else {
+        // like also marks as read (server does it); update the FAB if needed
+        if (liked && currentFilter === "all") {
+          const unreadLeft = lastItems.some(b => b.id !== id && !b.is_read);
+          document.getElementById("readall").style.display = unreadLeft ? "" : "none";
+        }
+      }
+    }
+
     async function load() {
       const list = document.getElementById("list");
       const count = document.getElementById("count");
       try {
         const data = await fetchJSON(`/api/bookmarks?filter=${currentFilter}&limit=100`);
+        lastItems = data.items || [];
         count.textContent = data.total ? `· ${data.total}` : "";
         // "tout lu" only makes sense when there is something left to read
         const unreadLeft = currentFilter === "unread"
@@ -452,7 +516,7 @@
           // like / unlike — the server also feeds personalization prefs
           await fetchJSON(`/api/bookmarks/${id}/${action}`, { method: "POST" });
           toast(action === "like" ? "♥ Ajouté à vos préférences" : "Like retiré");
-          load();
+          applyLikeLocal(id, action === "like");
         } catch (err) {
           btn.disabled = false;
           toast("Erreur : " + err.message);
