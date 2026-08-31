@@ -282,7 +282,12 @@
     let activeTag = null;
 
     async function fetchJSON(url, opts) {
-      const r = await fetch(url, opts);
+      // X-Radar-Request: anti-CSRF marker required by enforceCSRF on any
+      // mutating request. We merge with the caller's headers so existing
+      // options (Content-Type on POST) keep working.
+      const o = { ...(opts || {}) };
+      o.headers = { ...(o.headers || {}), "X-Radar-Request": "1" };
+      const r = await fetch(url, o);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return r.json();
     }

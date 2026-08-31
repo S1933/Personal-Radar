@@ -66,10 +66,52 @@ func New(cfg Config, st *store.Store, log *logging.Logger) *Server {
 	mux.Handle("/", s.handleStatic())
 	s.srv = &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           withLogging(mux, log),
+		Handler:           withLogging(enforceCSRF(mux), log),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+		// The defaults protect against slowloris (header read) and
+		// resource exhaustion from clients that never disconnect.
+		// /api/summary may wait up to 30s on a single LLM call, so the
+		// write window stays generous.
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 45 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 	return s
+}
+
+// enforceCSRF rejects mutating requests a third-party page could forge.
+// Cloudflare Access authenticates via the CF_Authorization cookie, and
+// browsers attach cookies to cross-origin POSTs — authentication alone
+// does not protect write endpoints.
+//
+// X-Radar-Request is the real lock: a custom header forces a CORS
+// preflight that this server never satisfies, so a cross-origin form
+// submission can never include it. Sec-Fetch-Site is a belt-and-braces
+// second check — it is a forbidden header that JavaScript cannot set,
+// which makes it unforgeable from a page.
+//
+// Both checks allow "" (empty) so non-browser clients (curl, the bot
+// itself) keep working without ceremony.
+func enforceCSRF(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet || r.Method == http.MethodHead {
+			next.ServeHTTP(w, r)
+			return
+		}
+		switch r.Header.Get("Sec-Fetch-Site") {
+		case "same-origin", "none", "":
+			// Allowed: the request originates from a page we serve,
+			// from a privileged context, or from a non-browser client.
+		default:
+			writeError(w, http.StatusForbidden, "cross-site request rejected")
+			return
+		}
+		if r.Header.Get("X-Radar-Request") != "1" {
+			writeError(w, http.StatusForbidden, "missing X-Radar-Request header")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // Start blocks until the server exits. Returns nil on graceful shutdown.

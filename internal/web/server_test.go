@@ -128,3 +128,48 @@ func min(a, b int) int {
 
 // keep log/stdin import alive so the file is self-contained
 var _ = log.Println
+
+func TestEnforceCSRF(t *testing.T) {
+	// Stand-in handler so the test does not need a real store / server.
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	mw := enforceCSRF(next)
+
+	cases := []struct {
+		name        string
+		method      string
+		sfs         string // Sec-Fetch-Site, "" = unset
+		xrr         string // X-Radar-Request, "" = unset
+		wantAllowed bool
+	}{
+		{"GET always passes", http.MethodGet, "cross-site", "", true},
+		{"HEAD always passes", http.MethodHead, "cross-site", "", true},
+		{"POST missing custom header", http.MethodPost, "same-origin", "", false},
+		{"POST cross-site rejected", http.MethodPost, "cross-site", "1", false},
+		{"POST legitimate same-origin", http.MethodPost, "same-origin", "1", true},
+		{"POST legitimate none", http.MethodPost, "none", "1", true},
+		{"POST curl-style (no fetch headers)", http.MethodPost, "", "1", true},
+		{"POST both missing", http.MethodPost, "", "", false},
+		{"POST wrong header value", http.MethodPost, "same-origin", "yes", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := httptest.NewRequest(tc.method, "/api/bookmarks/read-all", nil)
+			if tc.sfs != "" {
+				r.Header.Set("Sec-Fetch-Site", tc.sfs)
+			}
+			if tc.xrr != "" {
+				r.Header.Set("X-Radar-Request", tc.xrr)
+			}
+			w := httptest.NewRecorder()
+			mw.ServeHTTP(w, r)
+			if tc.wantAllowed && w.Code != http.StatusOK {
+				t.Fatalf("expected pass-through, got %d", w.Code)
+			}
+			if !tc.wantAllowed && w.Code != http.StatusForbidden {
+				t.Fatalf("expected 403, got %d (body=%s)", w.Code, w.Body.String())
+			}
+		})
+	}
+}
