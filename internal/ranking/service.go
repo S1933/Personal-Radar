@@ -2,7 +2,6 @@ package ranking
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"regexp"
 	"strings"
@@ -199,5 +198,3 @@ func (h *heuristicScorer) Score(_ context.Context, it store.ScoredItem) (store.S
 
 	return sc, nil
 }
-
-var _ = fmt.Sprintf // keep fmt for future debug logging
