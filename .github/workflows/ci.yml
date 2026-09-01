@@ -37,39 +37,43 @@ jobs:
   # Slow path: cross-compile every platform the radar runs on. Skipped
   # for draft PRs to save minutes; the release workflow runs it again
   # on tag push.
+  #
+  # The matrix uses explicit goos/goarch fields (not slash-separated
+  # strings): the GitHub Actions expression language only supports
+  # contains/startsWith/endsWith/format/join/toJSON/fromJSON/hashFiles,
+  # so things like ${{ matrix.platform.replace('/', '-') }} silently
+  # evaluate to "" and the artifact path collapses. Two named fields
+  # sidestep the issue and produce a clean artifact name.
   build:
-    name: cross-compile (${{ matrix.platform }})
+    name: cross-compile (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ubuntu-latest
     needs: test
     if: github.event_name == 'push' || github.event.pull_request.draft == false
     strategy:
       fail-fast: false
       matrix:
-        platform:
-          - linux/amd64
-          - linux/arm64
-          - darwin/amd64
+        include:
+          - { goos: linux,  goarch: amd64 }
+          - { goos: linux,  goarch: arm64 }
+          - { goos: darwin, goarch: amd64 }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: "1.25"
           cache: true
-      - name: Build ${{ matrix.platform }}
+      - name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
         run: |
-          os=$(echo ${{ matrix.platform }} | cut -d/ -f1)
-          arch=$(echo ${{ matrix.platform }} | cut -d/ -f2)
           mkdir -p dist
-          CGO_ENABLED=0 GOOS=$os GOARCH=$arch \
+          CGO_ENABLED=0 \
             go build -ldflags "-s -w -X main.version=${GITHUB_SHA::7}" \
-            -o dist/radar-$os-$arch ./cmd/radar
+            -o dist/radar-$GOOS-$GOARCH ./cmd/radar
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: radar-${{ matrix.platform }}
-          # matrix.platform uses slashes (linux/amd64) but the
-          # built binary uses a dash (dist/radar-linux-amd64);
-          # without this replacement the upload step looks for
-          # dist/radar-linux/amd64 and fails.
-          path: dist/radar-${{ matrix.platform.replace('/', '-') }}
+          name: radar-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/radar-${{ matrix.goos }}-${{ matrix.goarch }}
           if-no-files-found: error
