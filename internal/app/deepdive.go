@@ -16,8 +16,8 @@ import (
 )
 
 // escapeHTML mirrors internal/briefing.escapeHTML; duplicated here to
-// avoid a cross-package import for one call. T7 (textutil) will fold
-// both copies into a shared package.
+// avoid a cross-package import for one call. Until the briefing and
+// app packages can share a helper, this stays a deliberate duplicate.
 func escapeHTML(s string) string {
 	return html.EscapeString(s)
 }
@@ -38,8 +38,13 @@ func (a *App) DeepDiveItem(ctx context.Context, id int64) (string, error) {
 	}
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("🔬 <b>DEEP DIVE</b> — %s\n\n", escapeHTML(it.Title)))
-	b.WriteString(analysis)
-	b.WriteString(fmt.Sprintf("\n\n🔗 %s\n", it.URL))
+	// Escape the LLM output too: the prompt asks for markdown,
+	// which is mostly safe, but code samples and <, >, & characters
+	// in technical prose trip Telegram's HTML parser. Without
+	// this escape a single "<10" or "R&D" makes the whole message
+	// fail with "can't parse entities", and the user gets nothing.
+	b.WriteString(escapeHTML(analysis))
+	b.WriteString(fmt.Sprintf("\n\n🔗 %s\n", html.EscapeString(it.URL)))
 	return b.String(), nil
 }
 

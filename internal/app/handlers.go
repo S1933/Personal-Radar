@@ -75,7 +75,7 @@ func (h *commandHandler) Handle(ctx context.Context, cmd telegram.Command) (stri
 
 	case "reaction":
 		if cmd.ItemID == 0 {
-			return "Ajoute le numéro de l'item : par exemple `👍 12` pour liker l'item 12.", nil
+			return "Ajoute le numéro de l'item : par exemple <code>👍 12</code> pour liker l'item 12.", nil
 		}
 		switch cmd.Emoji {
 		case "👍":

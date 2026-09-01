@@ -122,27 +122,40 @@ func (c *Client) api(method string, payload any) ([]byte, error) {
 // several messages when it exceeds Telegram's 4096-character limit.
 //
 // On a parse error (malformed entity in a source title we failed to
-// escape), the chunk is retried as plain text: a briefing with lost
-// formatting beats no briefing at all.
+// escape) the same chunk is retried as plain text. The fallback
+// preserves delivery at the cost of formatting.
 func (c *Client) Send(ctx context.Context, text string) error {
 	if c.cfg.ChatID == "" {
 		return fmt.Errorf("no chat id configured")
 	}
 	for _, chunk := range splitMessage(text, maxMessageLen) {
-		if _, err := c.api("sendMessage", map[string]any{
-			"chat_id":                  c.cfg.ChatID,
-			"text":                     chunk,
-			"parse_mode":               "HTML",
-			"disable_web_page_preview": true,
-		}); err != nil {
-			c.log.Warn("send with HTML failed, retrying as plain text", "error", err)
-			if _, err2 := c.api("sendMessage", map[string]any{
-				"chat_id": c.cfg.ChatID,
-				"text":    chunk,
-			}); err2 != nil {
-				return err2
-			}
+		if err := c.sendChunk(ctx, chunk); err != nil {
+			return err
 		}
+	}
+	return nil
+}
+
+// sendChunk delivers a single chunk. It tries HTML first; on a parse
+// error (malformed entity — the response is unparseable HTML), it
+// retries as plain text. Used by both Send (briefing) and Listen
+// (command replies), so a single code path handles the fallback.
+func (c *Client) sendChunk(ctx context.Context, chunk string) error {
+	if _, err := c.api("sendMessage", map[string]any{
+		"chat_id":                  c.cfg.ChatID,
+		"text":                     chunk,
+		"parse_mode":               "HTML",
+		"disable_web_page_preview": true,
+	}); err == nil {
+		return nil
+	} else {
+		c.log.Warn("send with HTML failed, retrying as plain text", "error", err)
+	}
+	if _, err := c.api("sendMessage", map[string]any{
+		"chat_id": c.cfg.ChatID,
+		"text":    chunk,
+	}); err != nil {
+		return fmt.Errorf("send plain: %w", err)
 	}
 	return nil
 }
@@ -246,15 +259,10 @@ func (c *Client) Listen(ctx context.Context, handlers map[string]Handler) error 
 			cmd := parse(u.Message.Text)
 			reply := c.dispatch(ctx, cmd)
 			if reply != "" && c.cfg.ChatID != "" {
-				// HTML for the same reason as Send(): a source we
-				// don't control is replying with content that may
-				// contain "_" or "*" and break Markdown v1.
-				if _, err := c.api("sendMessage", map[string]any{
-					"chat_id":                  c.cfg.ChatID,
-					"text":                     reply,
-					"parse_mode":               "HTML",
-					"disable_web_page_preview": true,
-				}); err != nil {
+				// Use the shared chunked sender (HTML + plain-text
+				// fallback) so a reply containing a stray '<' does
+				// not silently fail like it used to.
+				if err := c.sendChunk(ctx, reply); err != nil {
 					c.log.Warn("reply", "error", err)
 				}
 			}
