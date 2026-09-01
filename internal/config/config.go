@@ -72,12 +72,21 @@ func (d DatabaseConfig) DSN() string {
 	if name == "" {
 		name = "radar"
 	}
-	// url.QueryEscape handles '@', ':', '?', '#', '/', '+', '%'
-	// in user-supplied passwords; the previous DSN() had 4
-	// placeholders and 5 args, so Go appended "%!(EXTRA string=<password>)"
-	// and the resulting string was not a valid Postgres URL.
-	encoded := url.QueryEscape(pass)
-	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable", user, encoded, host, port, name)
+	// url.UserPassword applies the correct percent-encoding for
+	// the userinfo component of a URL — '+' is reserved for the
+	// query component, so url.QueryEscape (the previous approach)
+	// would silently turn an actual space (' ') in a password
+	// into a literal '+' that Postgres would not decode. With
+	// a generated hex password the bug is invisible; with a
+	// passphrase from a password manager it bites.
+	u := &url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(user, pass),
+		Host:     fmt.Sprintf("%s:%d", host, port),
+		Path:     "/" + name,
+		RawQuery: "sslmode=disable",
+	}
+	return u.String()
 }
 
 type BriefingConfig struct {

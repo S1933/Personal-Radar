@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/S1933/personal-radar/internal/config"
 	"github.com/S1933/personal-radar/internal/logging"
@@ -179,10 +180,19 @@ func splitMessage(s string, max int) []string {
 		}
 	}
 	for _, line := range strings.Split(s, "\n") {
-		if len(line) > max {
-			// Pathological single line (e.g. one giant URL): cut on
-			// a rune boundary so the chunk is still valid UTF-8.
-			line = textutil.Truncate(line, max/4, "…")
+		// A pathological single line (e.g. one giant URL, or a
+		// 1024-rune emoji sequence that the user actually sent):
+		// shrink it in a loop until it fits under the byte budget.
+		// The previous version used a one-shot max/4 cut, which
+		// was right for ASCII but exceeded max for 4-byte runes
+		// (each rune 4 octets → 1024 runes → 4096 octets, plus
+		// the ellipsis on top).
+		for len(line) > max {
+			shrinkTo := utf8.RuneCountInString(line) / 2
+			if shrinkTo < 1 {
+				shrinkTo = 1
+			}
+			line = textutil.Truncate(line, shrinkTo, "…")
 		}
 		if buf.Len()+len(line)+1 > max {
 			flush()
