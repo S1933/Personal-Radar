@@ -29,3 +29,16 @@ func TestContentHashTruncated(t *testing.T) {
 		t.Errorf("hash should only consider the first 2KB of content")
 	}
 }
+
+func TestContentHashEmpty(t *testing.T) {
+	// An item with neither title nor content has nothing to
+	// identify it by; the empty hash prevents FindDuplicate
+	// from merging two distinct empty-content items under the
+	// same SHA-256.
+	if h := ContentHash(Item{}); h != "" {
+		t.Errorf("empty item should hash to empty string, got %q", h)
+	}
+	if h := ContentHash(Item{Title: "   "}); h != "" {
+		t.Errorf("whitespace-only title should hash to empty, got %q", h)
+	}
+}

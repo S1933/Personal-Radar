@@ -78,6 +78,22 @@ func (f *fakeStore) FindDuplicate(_ context.Context, canonicalURL, hash string) 
 	return 0, false, nil
 }
 
+func (f *fakeStore) ItemSource(_ context.Context, id int64) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for k, v := range f.rows {
+		if v == id {
+			// key is "source\x00sourceID" (see key() above)
+			for i := 0; i < len(k); i++ {
+				if k[i] == 0 {
+					return k[:i], nil
+				}
+			}
+		}
+	}
+	return "", nil
+}
+
 type captureLog struct{ infos []string }
 
 func (c *captureLog) Info(_ string, _ ...any) { c.infos = append(c.infos, "info") }
@@ -181,5 +197,71 @@ func TestIngestBatch_NoFalsePositive(t *testing.T) {
 	}
 	if n != 2 {
 		t.Errorf("deux items distincts auraient dû être insérés, got %d", n)
+	}
+}
+
+func TestIngestBatch_DedupLogSilentOnSelfMatch(t *testing.T) {
+	// The previous code logged "dedup merge" for every match. An
+	// item with a canonical_url or content_hash that matches
+	// itself (the same row the cycle just inserted) used to
+	// flood the log with non-merge noise. The new gate logs
+	// only when the originating source differs.
+	fs := newFakeStore()
+	log := &captureLog{}
+	s := New(fs, log)
+
+	common := model.Item{
+		Title:        "OpenAI ships GPT",
+		Content:      "The new model is now generally available.",
+		CanonicalURL: "https://openai.com/blog/gpt",
+		Source:       "rss",
+		SourceID:     "rss-1",
+	}
+	// First arrival creates the row.
+	if _, err := s.IngestBatch(context.Background(), "rss", []model.Item{common}); err != nil {
+		t.Fatal(err)
+	}
+	before := len(log.infos)
+	// Second arrival with a different surface id but identical
+	// canonical_url — the dedup branch fires, but the source
+	// matches the row already in store, so we must stay silent.
+	again := common
+	again.SourceID = "rss-2"
+	if _, err := s.IngestBatch(context.Background(), "rss", []model.Item{again}); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(log.infos); got != before {
+		t.Errorf("self-merge should not log; infos went from %d to %d", before, got)
+	}
+}
+
+func TestIngestBatch_DedupLogNoisyOnCrossSource(t *testing.T) {
+	// The same story via a different collector must still log
+	// — that is the only signal that surfaces cross-source
+	// coverage in production.
+	fs := newFakeStore()
+	log := &captureLog{}
+	s := New(fs, log)
+
+	common := model.Item{
+		Title:        "OpenAI ships GPT",
+		Content:      "The new model is now generally available.",
+		CanonicalURL: "https://openai.com/blog/gpt",
+	}
+	rss := common
+	rss.Source = "rss"
+	rss.SourceID = "rss-1"
+	if _, err := s.IngestBatch(context.Background(), "rss", []model.Item{rss}); err != nil {
+		t.Fatal(err)
+	}
+	before := len(log.infos)
+	x := common
+	x.Source = "x"
+	x.SourceID = "tweet-1"
+	if _, err := s.IngestBatch(context.Background(), "x", []model.Item{x}); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(log.infos); got <= before {
+		t.Errorf("cross-source merge should log; infos stayed at %d", got)
 	}
 }

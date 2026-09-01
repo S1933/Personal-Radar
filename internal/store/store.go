@@ -65,6 +65,21 @@ func (s *Store) AddItemSource(ctx context.Context, itemID int64, source, ref str
 	return err
 }
 
+// ItemSource returns the originating source of an item (the value
+// stored in items.source, not the rows in item_sources). Used by
+// ingestion to decide whether a duplicate match is a real
+// cross-source merge or the same collector seeing its own record.
+func (s *Store) ItemSource(ctx context.Context, itemID int64) (string, error) {
+	var src string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT source FROM items WHERE id = $1`, itemID,
+	).Scan(&src)
+	if err != nil {
+		return "", err
+	}
+	return src, nil
+}
+
 // FindDuplicate locates an existing item describing the same content
 // as the incoming one. Canonical URL is tried first (strongest
 // signal), then the content hash (title + first 2KB of body), which

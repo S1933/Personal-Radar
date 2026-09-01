@@ -69,6 +69,7 @@ func (m *bm25) score(text string, keywords []string) float64 {
 		tf[t]++
 	}
 	var raw float64
+	var matched int
 	for _, kw := range keywords {
 		kts := tokenise(kw)
 		if len(kts) == 0 {
@@ -87,6 +88,7 @@ func (m *bm25) score(text string, keywords []string) float64 {
 		if !allPresent {
 			continue
 		}
+		matched++
 		// Sum BM25-saturated TF contributions.
 		for _, kt := range kts {
 			f := float64(tf[kt])
@@ -95,14 +97,25 @@ func (m *bm25) score(text string, keywords []string) float64 {
 			raw += numer / denom
 		}
 	}
-	if raw == 0 {
+	if matched == 0 {
 		return 0
 	}
-	// Map to [0, 1]. 1 keyword match ≈ 1.0 (because f=1, k1=1.5
-	// gives 1*(1.5+1)/(1+1.5) = 1.0) → raw=1 → 0.5. Two distinct
-	// matches saturate above 0.66. We expose the raw value divided
-	// by the number of keywords, so a topic with 5 keywords where
-	// 1 matches gives 0.2, while a 1-keyword topic with 1 match
-	// gives 1.0. This prevents tiny topics from outscoring rich ones.
-	return raw / float64(len(keywords))
+	// Normalise over the matched keyword groups, not over the
+	// full vocabulary. A previous version divided by
+	// len(keywords), which meant a topic with 12 lemmas could
+	// never score higher than a topic with 1 lemma — the rich
+	// topic always lost. The intent is the opposite: a topic
+	// whose lemmas are densely matched should score high, and a
+	// small coverage bonus rewards items that touch several
+	// lemmas of the same topic.
+	//
+	// raw / matched is the average saturation across the
+	// groups that fired; (0.6 + 0.4*coverage) shifts that up
+	// when the document covers more of the topic vocabulary.
+	coverage := float64(matched) / float64(len(keywords))
+	score := (raw / float64(matched)) * (0.6 + 0.4*coverage)
+	if score > 1 {
+		score = 1
+	}
+	return score
 }

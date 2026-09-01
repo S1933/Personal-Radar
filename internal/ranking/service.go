@@ -75,7 +75,13 @@ func (s *Service) RankPending(ctx context.Context) (int, error) {
 		}
 		sc.Personalization = personalizationScore(it, prefs)
 		sc.Final = finalScore(sc)
-		sc.Model = "heuristic-v1"
+		// Bump on every change of formula — the model tag is
+		// what lets us invalidate stale scores via
+		//   DELETE FROM scores WHERE model = '<previous tag>';
+		// and let RankPending recompute them. heuristic-v2
+		// ships with the BM25 relevance; v1 was the
+		// substring-count relevance.
+		sc.Model = "heuristic-v2"
 		if err := s.store.SaveScore(ctx, it.DBID, sc); err != nil {
 			s.log.Warn("save score", "id", it.DBID, "error", err)
 			continue

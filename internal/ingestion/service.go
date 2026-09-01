@@ -30,6 +30,11 @@ type Store interface {
 	// (0, false, nil) when the item is new. Used to merge cross-source
 	// coverage (the same story arrives via RSS, X and Reddit).
 	FindDuplicate(ctx context.Context, canonicalURL, hash string) (int64, bool, error)
+	// ItemSource returns the originating source column of an
+	// item (the row in items.source, not the auxiliary
+	// item_sources rows). Used to tell a real cross-source
+	// merge from the same collector seeing its own record.
+	ItemSource(ctx context.Context, itemID int64) (string, error)
 }
 
 type Logger interface {
@@ -68,8 +73,19 @@ func (s *Service) IngestBatch(ctx context.Context, collector string, items []mod
 			if err := s.store.AddItemSource(ctx, id, it.Source, ref); err != nil {
 				s.log.Warn("add item source", "collector", collector, "error", err)
 			}
-			s.log.Info("dedup merge", "collector", collector, "item_id", id,
-				"source_id", it.SourceID, "title", it.Title)
+			// The previous version logged every match, which on
+			// a 20-minute cycle meant ~30 RSS items per cycle
+			// matching their own rows (canonical_url is by
+			// construction identical to themselves) — the
+			// "dedup merge" log lost its meaning. Only log
+			// when the matching row came from a different
+			// source, which is the only case the log was
+			// supposed to surface.
+			if orig, srcErr := s.store.ItemSource(ctx, id); srcErr == nil && orig != it.Source {
+				s.log.Info("dedup merge", "item_id", id,
+					"from_source", orig, "into_source", it.Source,
+					"title", it.Title)
+			}
 			continue
 		}
 
