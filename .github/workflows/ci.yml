@@ -67,5 +67,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: radar-${{ matrix.platform }}
-          path: dist/radar-${{ matrix.platform }}
+          # matrix.platform uses slashes (linux/amd64) but the
+          # built binary uses a dash (dist/radar-linux-amd64);
+          # without this replacement the upload step looks for
+          # dist/radar-linux/amd64 and fails.
+          path: dist/radar-${{ matrix.platform.replace('/', '-') }}
           if-no-files-found: error
