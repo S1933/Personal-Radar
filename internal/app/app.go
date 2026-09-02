@@ -28,6 +28,27 @@ import (
 
 // App wires every component of the radar together. It owns the database
 // pool and the lifecycle of long-running workers (scheduler, telegram).
+// ingestionSummarizerAdapter bridges summary.Service (concrete type with
+// a richer signature) and the narrow ingestion.Summarizer interface. It
+// exists only so the app wiring doesn't have to declare one more
+// dependency type — the actual conversion is trivial.
+type ingestionSummarizerAdapter struct{ svc *summary.Service }
+
+func (a *ingestionSummarizerAdapter) Enabled() bool { return a.svc.Enabled() }
+
+func (a *ingestionSummarizerAdapter) Summarize(
+	ctx context.Context, id int64, title, content, source string, existing ingestion.ExistingSummary,
+) (string, []string, error) {
+	sg, err := a.svc.Summarize(ctx, id, title, content, source, summary.Summary{
+		Title:  existing.Title,
+		Points: existing.Points,
+	})
+	if err != nil {
+		return "", nil, err
+	}
+	return sg.Title, sg.Points, nil
+}
+
 type App struct {
 	Cfg *config.Config
 	Log *logging.Logger
@@ -40,7 +61,8 @@ type App struct {
 	Briefer   *briefing.Service
 	Telegram  *telegram.Client
 	Scheduler *scheduler.Scheduler
-	DeepDive  *DeepDive
+	DeepDive    *DeepDive
+	Summary     *summary.Service
 }
 
 // New builds the App: opens the DB pool and wires services. Collectors are
@@ -73,7 +95,14 @@ func New(ctx context.Context, cfg *config.Config, log *logging.Logger) (*App, er
 		}
 	}
 
-	svc := ingestion.New(st, log.With("sub", "ingestion"))
+	// Summarizer generates the French recap attached to every ingested
+	// item. Sharing the same instance between ingestion and the web layer
+	// keeps the in-memory cache hot (the web /api/summary fallback reads
+	// it before going to the DB). Constructed once and reused.
+	summ := summary.New(cfg.Models)
+	ingSumm := &ingestionSummarizerAdapter{svc: summ}
+
+	svc := ingestion.New(st, log.With("sub", "ingestion"), ingSumm, st)
 
 	app := &App{
 		Cfg:       cfg,
@@ -87,6 +116,7 @@ func New(ctx context.Context, cfg *config.Config, log *logging.Logger) (*App, er
 		Telegram:  tg,
 		Scheduler: scheduler.New(log.With("sub", "scheduler")),
 		DeepDive:  NewDeepDive(cfg.Models),
+		Summary:   summ,
 	}
 
 	// A misconfigured vault makes /save write into the container's
@@ -302,10 +332,12 @@ func (a *App) StartWeb(ctx context.Context) error {
 	// synthesizer. When no LLM is configured it stays disabled and the
 	// dashboard falls back to content excerpts — the web server remains
 	// fully functional without it.
-	summ := summary.New(a.Cfg.Models)
+	// The summarizer is the same instance used by ingestion to populate
+	// summary_fr at collect-time. Reusing it here keeps the in-memory
+	// cache hot and avoids reconstructing the http.Client.
 	srv := web.New(web.Config{
 		Addr:       WebAddr(),
-		Summarizer: summ,
+		Summarizer: a.Summary,
 		// Dashboard likes feed the same personalization preferences as the
 		// Telegram 👍/🔥 reactions, so the ranking pipeline boosts future
 		// items sharing topics/sources/authors with liked ones.

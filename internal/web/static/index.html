@@ -142,7 +142,7 @@
       transition: color 0.12s;
     }
     a.sum-title:hover { color: var(--accent); }
-    .sum-title.loading { color: #9a917f; font-style: italic; font-weight: 400; }
+    .sum-title.loading { visibility: hidden; }
     .sum-points {
       margin: 6px 0 0; padding: 0 0 0 18px;
       color: #5a5347; font-size: 15px; line-height: 1.5;
@@ -344,10 +344,16 @@
       // show up to 3 chips (the ingestion pipeline now guarantees 3 tags)
       const chips = topics.slice(0, 3);
       const rest = topics.length - 3;
+      // The summary is generated and persisted at ingestion time, so the
+      // card renders it synchronously — no placeholder, no /api/summary
+      // round-trip. When the LLM is disabled (or fails) we fall back to
+      // the raw title.
+      const frTitle = b.summary_title || b.title || "";
+      const frPoints = Array.isArray(b.summary_points) ? b.summary_points : [];
       card.innerHTML = `
-        <div class="card-summary" id="summary-${b.id}">
-          <a class="sum-title loading" id="title-${b.id}" href="${escape(url)}" target="_blank" rel="noopener">Résumé…</a>
-          <ul class="sum-points loading" id="points-${b.id}"></ul>
+        <div class="card-summary">
+          <a class="sum-title" href="${escape(url)}" target="_blank" rel="noopener">${escape(frTitle)}</a>
+          <ul class="sum-points">${frPoints.map(p => `<li>${escape(p)}</li>`).join("")}</ul>
         </div>
         ${chips.length ? `<div class="tags">${chips.map(t => `<button class="tag" data-tag="${escape(t)}">${escape(TAG_LABEL[t] || t)}</button>`).join("")}${rest > 0 ? `<span class="tag">+${rest}</span>` : ""}</div>` : ""}
         <div class="card-foot">
@@ -366,27 +372,10 @@
     }
 
     async function loadSummary(id) {
-      const titleEl = document.getElementById(`title-${id}`);
-      const pointsEl = document.getElementById(`points-${id}`);
-      try {
-        const data = await fetchJSON(`/api/summary/${id}`);
-        const pts = (data.points && data.points.length) ? data.points : (data.summary ? [data.summary] : []);
-        if (titleEl) {
-          titleEl.classList.remove("loading");
-          // title if present, else first point doubles as the clickable head
-          titleEl.textContent = data.title ? data.title : (pts[0] || "—");
-        }
-        if (pointsEl) {
-          pointsEl.classList.remove("loading");
-          const bullets = data.title ? pts : pts.slice(1);
-          pointsEl.innerHTML = bullets.map(p => `<li>${escape(p)}</li>`).join("");
-        }
-      } catch (e) {
-        if (titleEl) {
-          titleEl.classList.remove("loading");
-          titleEl.textContent = "Résumé indisponible";
-        }
-      }
+      // No-op stub: the dashboard now renders the summary from the
+      // bookmark payload (b.summary_title / b.summary_points), so no
+      // lazy fetch is needed. Kept as a no-op for compatibility.
+      void id;
     }
 
     // tagbar: top categories among the loaded items, each with a count.
@@ -504,7 +493,6 @@
         const frag = document.createDocumentFragment();
         for (const b of data.items) frag.appendChild(renderItem(b));
         list.appendChild(frag);
-        for (const b of data.items) loadSummary(b.id);
         applyTagFilter(); // re-apply in case a tag filter is active
       } catch (e) {
         list.innerHTML = `<div class="empty">⚠️ ${escape(e.message)}</div>`;
