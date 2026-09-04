@@ -102,6 +102,7 @@ x:
     - KoesslerTheo
     - cryptulien
     - BuildWithManu
+    - yOyO38  # Yoan Bernabeu — open-source dev tooling (e.g. pronote-digest)
   queries:
     - "coding agent"
     - "AI agent framework"
