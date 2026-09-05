@@ -225,6 +225,8 @@ func topicsFor(sub string) []string {
 		return []string{"go", "software-engineering"}
 	case strings.Contains(s, "devops"):
 		return []string{"devops"}
+	case strings.Contains(s, "claude") || strings.Contains(s, "codex"):
+		return []string{"ai", "coding-agents"}
 	default:
 		return []string{"software-engineering"}
 	}

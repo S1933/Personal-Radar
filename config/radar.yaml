@@ -76,6 +76,7 @@ reddit:
     - Python
     - rust
     - ZaiGLM
+    - claudeskills   # Claude Skills (Anthropic) — instructions/scripts/resources for Claude
   limit: 25
 
 github:
